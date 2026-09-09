@@ -39,7 +39,7 @@ Stand: 2026-09-09. Dieses Dokument fasst zusammen, wie das Projekt "HA Library T
 
 ---
 
-## 4. Bekanntes Jules-Fehlverhalten (aus dem Schwesterprojekt, hier vorsorglich dokumentiert)
+## 4. Bekanntes Jules-Fehlverhalten (aus dem Schwesterprojekt, hier vorsorglich dokumentiert — Punkt 2 mittlerweile auch in diesem Repo real aufgetreten, siehe Vorfall unten)
 
 - **"Leere"/rückgängig machende Commits:** Nach Review-Feedback reagiert Jules sichtbar, pusht aber teils einen Commit ohne echte inhaltliche Änderung.
   - Eskalation: 1) präzises Review-Kommentar mit konkretem Diff-Beweis, 2) falls nach 1–2 weiteren Commits keine echte Änderung erfolgt → Nutzer informieren und den Fix selbst umsetzen.
@@ -47,6 +47,18 @@ Stand: 2026-09-09. Dieses Dokument fasst zusammen, wie das Projekt "HA Library T
   1. Nach jedem eigenen Push auf eine **aktive** Jules-PR-Branch: vor dem Merge den tatsächlichen Head-SHA und Diff erneut gegenprüfen (`pull_request_read`/`get_diff` unmittelbar vor dem Merge-Klick), nicht auf den zuletzt bekannten Stand verlassen.
   2. Nach dem Mergen stichprobenartig verifizieren, dass zuvor bereits gemergte, in der PR nicht erwähnte Dateien nicht plötzlich fehlen.
   3. Bei einem Merge-Konflikt auf einer noch **aktiven** Jules-Branch: eigenen Fix nach Möglichkeit als separaten PR gegen `main` vorschlagen statt direkt auf die laufende Jules-Branch zu pushen, um genau diese Race Condition zu vermeiden.
+
+### ⚠️ Realer Vorfall in diesem Repo: PR #3 (2026-09-09)
+
+Punkt 2 ist hier tatsächlich eingetreten, nicht nur als vorsorgliche Regel:
+
+1. `REQUEST_CHANGES`-Review auf PR #3 mit drei Findings gepostet (u. a. blockierend: iframe-Panel bekommt kein `hass`-Objekt injiziert).
+2. Jules reagierte dreimal in Folge mit einem neuen Commit, aber **identischem Tree-Hash** (`d718cf17...`) — jedes Mal 0 inhaltliche Änderung, trotz `@jules`-Anstoß und einem zweiten, präziseren Kommentar mit explizitem Diff-Beweis.
+3. Eskalation gemäß Regel oben: die drei Fixes selbst implementiert und auf den PR-#3-Branch gepusht (Commit `932dbcb`).
+4. **Innerhalb weniger Minuten** pushte Jules einen weiteren Commit (`fbf0d9e`) — mit `932dbcb` als Parent, aber der resultierende Datei-Stand entsprach wieder **exakt** dem alten Zustand vor dem Fix (wieder derselbe Tree-Hash `d718cf17...` wie die drei Leer-Commits davor). Das neu hinzugefügte `ha-client.js` war komplett gelöscht, alle drei Fixes zurückgesetzt.
+5. Reaktion: **Nicht** erneut auf demselben Branch gefixt (Vermeidung einer Fix-Revert-Schleife), sondern der validierte Stand (Jules' ursprüngliche valide Arbeit + die drei Fixes, Commit `932dbcb`) auf einen neuen Branch (`session-2-hardened`) gestellt und als eigener PR (#5) gegen `main` geöffnet. PR #3 kommentiert (Bitte, nichts mehr zu pushen) und geschlossen.
+
+**Bestätigte Lehre:** Genau wie im Merc-Repo beschrieben, scheint Jules bei mehreren Anstößen kurz hintereinander auf Basis eines **inzwischen veralteten eigenen Zwischenstands** weiterzuarbeiten und beim eigenen Push den zwischenzeitlichen Fremd-Push (hier: von Claude) zu überschreiben — obwohl der eigene Commit den fremden Commit korrekt als Parent führt. Das ist kein Force-Push/History-Rewrite, sondern ein regulärer neuer Commit mit inhaltlich falschem (zurückgesetztem) Tree. **Sobald ein eigener Fix auf einer Jules-Branch von einem direkt danach folgenden Jules-Commit klobbert wird: nicht erneut auf derselben Branch versuchen — sofort auf einen neuen, von Jules nicht mehr angefassten Branch/PR ausweichen (Vorgehen wie oben, Schritt 5), statt in eine Fix-Revert-Schleife zu geraten.**
 
 ---
 
@@ -64,9 +76,12 @@ Stand: 2026-09-09. Dieses Dokument fasst zusammen, wie das Projekt "HA Library T
 | PR/Issue | Feature | Zustand |
 |---|---|---|
 | PR #1 | Session 1: Grundgerüst & Custom Panel | Gemergt (von Claude direkt implementiert, nicht Jules) |
-| Issue #2 | Session 2: Backend-Logik, SQLite-DB & WebSocket-API | Mit Label `Jules` versehen, wartet auf PR |
+| Issue #2 | Session 2: Backend-Logik, SQLite-DB & WebSocket-API | Als PR #3 von Jules geliefert, aber wegen wiederholtem Revert-Verhalten geschlossen (siehe Vorfall in Abschnitt 4) |
+| PR #3 | Session 2 (Jules-Original) | Geschlossen, nicht gemergt — durch PR #5 ersetzt |
+| PR #5 | Session 2 (gehärtet: Jules-Arbeit + 3 Claude-Fixes) | Offen, wartet auf Review/Merge |
+| Issue #4 | Session 3: Frontend, Scanner & Sterne-Bewertung | Angelegt, bewusst **ohne** Label `Jules` — wird erst gesetzt, sobald PR #5 gemergt ist |
 
-Es läuft aktuell genau ein Jules-Issue — kein Überschneidungsrisiko. Bevor ein Issue für Session 3 gelabelt wird: warten, bis Issue #2 als PR gemergt ist.
+Bevor Issue #4 gelabelt wird: warten, bis PR #5 gemergt ist (kein Überschneidungsrisiko eingehen).
 
 ---
 
