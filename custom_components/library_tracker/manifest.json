@@ -1,0 +1,11 @@
+{
+  "domain": "library_tracker",
+  "name": "HA Library Tracker",
+  "codeowners": ["@mads"],
+  "config_flow": true,
+  "documentation": "https://github.com/PergonGER/HALibrarian",
+  "issue_tracker": "https://github.com/PergonGER/HALibrarian/issues",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}

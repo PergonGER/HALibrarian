@@ -1,0 +1,114 @@
+/*
+ * Note: this panel is loaded inside a plain <iframe>, so it does not
+ * automatically inherit Home Assistant's --primary-color etc. CSS
+ * variables. Colors below approximate the default HA Material theme;
+ * a real theme-variable bridge can be added in a later session if needed.
+ */
+
+:root {
+  --lt-primary: #03a9f4;
+  --lt-text-primary: #212121;
+  --lt-text-secondary: #727272;
+  --lt-bg: #fafafa;
+  --lt-card-bg: #ffffff;
+  --lt-divider: #e0e0e0;
+  --lt-success: #43a047;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lt-primary: #29b6f6;
+    --lt-text-primary: #e1e1e1;
+    --lt-text-secondary: #9b9b9b;
+    --lt-bg: #111111;
+    --lt-card-bg: #1c1c1c;
+    --lt-divider: #2f2f2f;
+    --lt-success: #66bb6a;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--lt-bg);
+  color: var(--lt-text-primary);
+  font-family: "Roboto", "Noto Sans", sans-serif;
+}
+
+.lt-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  background: var(--lt-primary);
+  color: #ffffff;
+}
+
+.lt-header__icon {
+  font-size: 24px;
+}
+
+.lt-header__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.lt-main {
+  padding: 24px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.lt-card {
+  background: var(--lt-card-bg);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  padding: 20px 24px;
+}
+
+.lt-card h2 {
+  margin-top: 0;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.lt-card p {
+  color: var(--lt-text-secondary);
+  line-height: 1.5;
+}
+
+.lt-status-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+}
+
+.lt-status-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--lt-divider);
+}
+
+.lt-status-list li:first-child {
+  border-top: none;
+}
+
+.lt-status-list__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lt-divider);
+  flex-shrink: 0;
+}
+
+.lt-status-list__dot--done {
+  background: var(--lt-success);
+}

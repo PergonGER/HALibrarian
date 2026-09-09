@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Library Tracker</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <header class="lt-header">
+    <span class="lt-header__icon">📚</span>
+    <h1 class="lt-header__title">Library Tracker</h1>
+  </header>
+
+  <main class="lt-main">
+    <section class="lt-card">
+      <h2>Willkommen bei HA Library Tracker</h2>
+      <p>
+        Das Grundgerüst der Integration ist eingerichtet. Datenbank,
+        WebSocket-Anbindung, Buchverwaltung, ISBN-Scanner und das
+        Autoren-Tracking folgen in den nächsten Ausbaustufen.
+      </p>
+      <ul class="lt-status-list">
+        <li><span class="lt-status-list__dot lt-status-list__dot--done"></span> Integration &amp; Custom Panel</li>
+        <li><span class="lt-status-list__dot"></span> Datenbank &amp; WebSocket-API</li>
+        <li><span class="lt-status-list__dot"></span> Buchverwaltung, Scanner &amp; Bewertung</li>
+        <li><span class="lt-status-list__dot"></span> Autoren-Tracking &amp; Benachrichtigungen</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>
