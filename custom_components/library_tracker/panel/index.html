@@ -26,31 +26,7 @@
       </ul>
     </section>
 
-    <section class="lt-card" id="auth-section">
-      <h3>Mit Home Assistant verbinden</h3>
-      <p>
-        Dieses Panel läuft in einem iframe und bekommt daher kein
-        <code>hass</code>-Objekt vom übergeordneten Fenster injiziert. Es
-        verbindet sich stattdessen direkt über die WebSocket-API von Home
-        Assistant. Dafür wird einmalig ein
-        <a href="/profile/security" target="_top">Long-Lived Access Token</a>
-        benötigt (Profil → Sicherheit → Long-Lived Access Tokens erstellen).
-        Das Token wird nur lokal in diesem Browser gespeichert.
-      </p>
-      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-        <input
-          type="password"
-          id="token-input"
-          placeholder="Long-Lived Access Token"
-          style="padding: 0.5rem; min-width: 280px;"
-          autocomplete="off"
-        />
-        <button id="btn-connect" style="padding: 0.5rem 1rem;">Verbinden</button>
-      </div>
-      <p id="connection-status" style="margin-top: 0.5rem; font-weight: 500;"></p>
-    </section>
-
-    <section class="lt-card" id="ws-console" hidden>
+    <section class="lt-card">
       <h3>WebSocket Test-Konsole</h3>
       <div style="margin-bottom: 1rem;">
         <h4>1. ISBN Lookup</h4>
@@ -94,7 +70,6 @@
     </section>
   </main>
 
-  <script src="./ha-client.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

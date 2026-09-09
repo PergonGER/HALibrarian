@@ -105,17 +105,8 @@ async def _async_query_google_books(
             "source": "google_books",
         }
 
-    except (ClientError, asyncio.TimeoutError) as err:
-        # Expected failure mode (network/timeout) - fall back to the next
-        # provider without alarming the user.
+    except (ClientError, asyncio.TimeoutError, Exception) as err:
         _LOGGER.debug("Error querying Google Books API for ISBN %s: %s", isbn, err)
-        return None
-    except Exception:  # noqa: BLE001 - see comment below
-        # Anything else (e.g. an unexpected response shape breaking the
-        # parsing above) is a bug, not an expected "ISBN not found" case.
-        # Still fall back to Open Library, but log loudly so it doesn't
-        # get silently mistaken for a normal "no match".
-        _LOGGER.exception("Unexpected error parsing Google Books response for ISBN %s", isbn)
         return None
 
 
@@ -170,16 +161,6 @@ async def _async_query_open_library(session: Any, isbn: str) -> dict[str, Any] |
             "source": "open_library",
         }
 
-    except (ClientError, asyncio.TimeoutError) as err:
-        # Expected failure mode (network/timeout) - no more providers to
-        # fall back to, so lookup_isbn simply reports "not found".
+    except (ClientError, asyncio.TimeoutError, Exception) as err:
         _LOGGER.debug("Error querying Open Library API for ISBN %s: %s", isbn, err)
-        return None
-    except Exception:  # noqa: BLE001 - see comment below
-        # Anything else (e.g. an unexpected response shape breaking the
-        # parsing above) is a bug, not an expected "ISBN not found" case.
-        # Log loudly so it doesn't get silently mistaken for a normal
-        # "no match" - this is our last fallback, so nothing downstream
-        # will catch it either.
-        _LOGGER.exception("Unexpected error parsing Open Library response for ISBN %s", isbn)
         return None
