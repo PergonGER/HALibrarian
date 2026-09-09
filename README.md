@@ -43,3 +43,11 @@ Der geplante Barcode-Scanner nutzt `getUserMedia` und benötigt daher
 einen "secure context" – also HTTPS (z. B. via Nabu Casa oder eigenes
 Zertifikat) oder `localhost`. Über reines HTTP im lokalen Netzwerk wird
 der Browser den Kamerazugriff blockieren.
+
+## Entwicklungsprozess mit Jules
+
+Feature-Sessions (siehe oben) werden über GitHub-Issues mit dem Label
+`Jules` an den autonomen Coding-Agenten Jules delegiert; kleinere
+Korrekturen erledigt Claude direkt. Ablauf, Rollen und gelernte
+Regeln (u. a. zur Vermeidung überlappender Sessions) stehen in
+[`docs/jules-collaboration-playbook.md`](docs/jules-collaboration-playbook.md).
