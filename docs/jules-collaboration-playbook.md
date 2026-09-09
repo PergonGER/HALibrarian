@@ -78,10 +78,10 @@ Punkt 2 ist hier tatsächlich eingetreten, nicht nur als vorsorgliche Regel:
 | PR #1 | Session 1: Grundgerüst & Custom Panel | Gemergt (von Claude direkt implementiert, nicht Jules) |
 | Issue #2 | Session 2: Backend-Logik, SQLite-DB & WebSocket-API | Als PR #3 von Jules geliefert, aber wegen wiederholtem Revert-Verhalten geschlossen (siehe Vorfall in Abschnitt 4) |
 | PR #3 | Session 2 (Jules-Original) | Geschlossen, nicht gemergt — durch PR #5 ersetzt |
-| PR #5 | Session 2 (gehärtet: Jules-Arbeit + 3 Claude-Fixes) | Offen, wartet auf Review/Merge |
-| Issue #4 | Session 3: Frontend, Scanner & Sterne-Bewertung | Angelegt, bewusst **ohne** Label `Jules` — wird erst gesetzt, sobald PR #5 gemergt ist |
+| PR #5 | Session 2 (gehärtet: Jules-Arbeit + 3 Claude-Fixes) | Gemergt |
+| Issue #4 | Session 3: Frontend, Scanner & Sterne-Bewertung | Label `Jules` gesetzt, sobald PR #5 in main war (kein Überschneidungsrisiko mehr) |
 
-Bevor Issue #4 gelabelt wird: warten, bis PR #5 gemergt ist (kein Überschneidungsrisiko eingehen).
+`main` ist jetzt auf dem vollständigen Session-2-Stand (Panel-Login via Long-Lived Token, DB, WebSocket-Commands, Google-Books/Open-Library-Lookup). Nach Merge stichprobenartig verifiziert, dass keine zuvor gemergten Dateien (Playbook, README-Verweis) verschwunden sind.
 
 ---
 
