@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up HA Library Tracker",
+        "description": "The Google Books API key is optional. Without a key (or if Google finds nothing) the integration automatically falls back to the Open Library API.",
+        "data": {
+          "google_books_api_key": "Google Books API key (optional)",
+          "notify_service": "Notify service for new-release alerts (e.g. notify.mobile_app_phone)",
+          "author_check_interval_hours": "Author check interval (hours)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Library Tracker is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HA Library Tracker – Settings",
+        "data": {
+          "google_books_api_key": "Google Books API key (optional)",
+          "notify_service": "Notify service for new-release alerts",
+          "author_check_interval_hours": "Author check interval (hours)"
+        }
+      }
+    }
+  }
+}
