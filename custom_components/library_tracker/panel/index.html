@@ -16,19 +16,85 @@
     <section class="lt-card">
       <h2>Willkommen bei HA Library Tracker</h2>
       <p>
-        Das Grundgerüst der Integration ist eingerichtet. Datenbank,
-        WebSocket-Anbindung, Buchverwaltung, ISBN-Scanner und das
-        Autoren-Tracking folgen in den nächsten Ausbaustufen.
+        Session 2: Backend-Logik, SQLite-Datenbank &amp; WebSocket-API sind aktiv.
       </p>
       <ul class="lt-status-list">
         <li><span class="lt-status-list__dot lt-status-list__dot--done"></span> Integration &amp; Custom Panel</li>
-        <li><span class="lt-status-list__dot"></span> Datenbank &amp; WebSocket-API</li>
+        <li><span class="lt-status-list__dot lt-status-list__dot--done"></span> Datenbank &amp; WebSocket-API</li>
         <li><span class="lt-status-list__dot"></span> Buchverwaltung, Scanner &amp; Bewertung</li>
         <li><span class="lt-status-list__dot"></span> Autoren-Tracking &amp; Benachrichtigungen</li>
       </ul>
     </section>
+
+    <section class="lt-card" id="auth-section">
+      <h3>Mit Home Assistant verbinden</h3>
+      <p>
+        Dieses Panel läuft in einem iframe und bekommt daher kein
+        <code>hass</code>-Objekt vom übergeordneten Fenster injiziert. Es
+        verbindet sich stattdessen direkt über die WebSocket-API von Home
+        Assistant. Dafür wird einmalig ein
+        <a href="/profile/security" target="_top">Long-Lived Access Token</a>
+        benötigt (Profil → Sicherheit → Long-Lived Access Tokens erstellen).
+        Das Token wird nur lokal in diesem Browser gespeichert.
+      </p>
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <input
+          type="password"
+          id="token-input"
+          placeholder="Long-Lived Access Token"
+          style="padding: 0.5rem; min-width: 280px;"
+          autocomplete="off"
+        />
+        <button id="btn-connect" style="padding: 0.5rem 1rem;">Verbinden</button>
+      </div>
+      <p id="connection-status" style="margin-top: 0.5rem; font-weight: 500;"></p>
+    </section>
+
+    <section class="lt-card" id="ws-console" hidden>
+      <h3>WebSocket Test-Konsole</h3>
+      <div style="margin-bottom: 1rem;">
+        <h4>1. ISBN Lookup</h4>
+        <input type="text" id="isbn-input" placeholder="z. B. 9780131103627" style="padding: 0.5rem; width: 200px;" />
+        <button id="btn-lookup" style="padding: 0.5rem 1rem;">Lookup ISBN</button>
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <h4>2. Bücherliste</h4>
+        <button id="btn-list-all">Alle Bücher</button>
+        <button id="btn-list-gelesen">Gelesen</button>
+        <button id="btn-list-ungelesen">Ungelesen</button>
+        <button id="btn-list-wunschliste">Wunschliste</button>
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <h4>3. Buch hinzufügen</h4>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; max-width: 300px;">
+          <input type="text" id="add-isbn" placeholder="ISBN" />
+          <input type="text" id="add-title" placeholder="Titel" />
+          <input type="text" id="add-author" placeholder="Autor" />
+          <select id="add-status">
+            <option value="ungelesen">ungelesen</option>
+            <option value="gelesen">gelesen</option>
+            <option value="wunschliste">wunschliste</option>
+          </select>
+          <input type="number" id="add-rating" placeholder="Bewertung (1-5, optional)" min="1" max="5" />
+          <button id="btn-add-book">Buch hinzufügen</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <h4>4. Autorenliste</h4>
+        <button id="btn-list-authors">Autoren abrufen</button>
+      </div>
+
+      <div>
+        <h4>Ergebnis:</h4>
+        <pre id="ws-output" style="background: #f4f4f4; padding: 1rem; border-radius: 4px; max-height: 300px; overflow: auto; white-space: pre-wrap; font-family: monospace;"></pre>
+      </div>
+    </section>
   </main>
 
+  <script src="./ha-client.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
