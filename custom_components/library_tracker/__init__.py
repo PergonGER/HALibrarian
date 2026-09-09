@@ -1,8 +1,6 @@
 """The HA Library Tracker integration.
 
-Session 1 scope: scaffolding + registration of the custom sidebar panel.
-The panel currently loads a static placeholder frontend; the WebSocket
-backend, database and API integrations are added in later sessions.
+Session 2 scope: Backend logic, SQLite database & WebSocket API.
 """
 
 from __future__ import annotations
@@ -15,12 +13,15 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    DB_FILENAME,
     DOMAIN,
     PANEL_ICON,
     PANEL_TITLE,
     PANEL_URL_PATH,
     STATIC_URL_BASE,
 )
+from .db import LibraryTrackerDatabase
+from .websocket_api import async_register_websocket_commands
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,9 +32,21 @@ PANEL_DIR = Path(__file__).parent / "panel"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up HA Library Tracker from a config entry."""
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {"entry": entry}
+    domain_data = hass.data.setdefault(DOMAIN, {})
 
+    # Initialize SQLite database if not present
+    if "db" not in domain_data:
+        db_path = hass.config.path(DB_FILENAME)
+        db = LibraryTrackerDatabase(db_path)
+        await hass.async_add_executor_job(db.init_db)
+        domain_data["db"] = db
+
+    domain_data[entry.entry_id] = {"entry": entry}
+
+    # Register WebSocket commands
+    async_register_websocket_commands(hass)
+
+    # Register sidebar panel
     await _async_register_panel(hass)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -43,12 +56,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    hass.data[DOMAIN].pop(entry.entry_id, None)
+    domain_data = hass.data.get(DOMAIN, {})
+    domain_data.pop(entry.entry_id, None)
 
-    # Only remove the panel once no config entries are left.
-    if not hass.data[DOMAIN]:
+    # Only clean up panel and database reference once no config entries are left.
+    remaining_entries = [
+        k for k in domain_data.keys() if k not in ("db", "panel_registered", "ws_commands_registered")
+    ]
+    if not remaining_entries:
         frontend = hass.components.frontend
         frontend.async_remove_panel(PANEL_URL_PATH)
+        domain_data.pop("db", None)
+        domain_data.pop("panel_registered", None)
 
     return True
 
@@ -62,8 +81,7 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
     """Serve the static frontend and register the sidebar panel.
 
     Uses a plain iframe panel loading a static HTML/JS/CSS bundle, so no
-    frontend build toolchain is required. Re-registering an already
-    registered static path / panel is a no-op guarded via hass.data.
+    frontend build toolchain is required.
     """
     if hass.data[DOMAIN].get("panel_registered"):
         return
