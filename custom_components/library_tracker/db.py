@@ -79,15 +79,18 @@ class LibraryTrackerDatabase:
         """Get existing author id or create a new author."""
         clean_name = name.strip()
         cursor = conn.cursor()
+
+        # INSERT OR IGNORE + re-SELECT instead of SELECT-then-INSERT: two
+        # executor-thread calls racing to create the same new author would
+        # otherwise both pass the initial SELECT before either INSERTs,
+        # and the second INSERT would fail on the UNIQUE constraint.
+        cursor.execute(
+            "INSERT OR IGNORE INTO Authors (name, is_favorite) VALUES (?, 0)",
+            (clean_name,),
+        )
         cursor.execute("SELECT id FROM Authors WHERE name = ?", (clean_name,))
         row = cursor.fetchone()
-        if row:
-            return int(row["id"])
-
-        cursor.execute(
-            "INSERT INTO Authors (name, is_favorite) VALUES (?, 0)", (clean_name,)
-        )
-        return cursor.lastrowid  # type: ignore[no-any-return]
+        return int(row["id"])
 
     def get_books(self, status: str | None = None) -> list[dict[str, Any]]:
         """Retrieve all books, optionally filtered by status."""
