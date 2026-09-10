@@ -410,12 +410,6 @@ body {
   display: none !important;
 }
 
-.lt-book-card__actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
 /* Star Rating Component */
 .lt-stars {
   display: inline-flex;
