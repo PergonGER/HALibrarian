@@ -92,6 +92,27 @@ nur eine Merkliste, damit nichts verloren geht.
     Suchfeld (statt/vor dem heutigen ISBN-Pflichtfeld) → Trefferliste →
     Formular wird vorausgefüllt, manuelle Eingabe ohne Treffer bleibt
     weiterhin möglich (dann wie bisher mit Pflichtfeldern).
-  - **Reihenfolge:** Erst nach dem Merge von PR #16 (`panel_custom`-
-    Migration) angehen — betrifft dieselben Dateien
-    (Formular/Bücher-hinzufügen-UI), die #16 gerade umbaut.
+  - **Reihenfolge:** PR #16 (`panel_custom`-Migration) ist gemerged
+    (v0.7.0) — kann jetzt angegangen werden.
+- **Bücherliste: Klick auf Bucheintrag öffnet Detail-Popup, ersetzt
+  Karten-Layout** (Nutzerwunsch 2026-09-10, entschieden): Die
+  Bücherliste zeigt künftig nur noch kompakte Zeilen/Kacheln (Cover-
+  Thumbnail, Titel, Autor — deutlich reduzierter Inhalt gegenüber der
+  heutigen `.lt-book-card`). Klick auf einen Eintrag öffnet ein Popup
+  mit allen Details (ISBN, Erscheinungsdatum, Status, Bewertung,
+  Serie/Badge falls vorhanden) **und** allen bisherigen Aktionen
+  (Bearbeiten, Löschen, „Gelesen"-Schnellaktion) — diese wandern vom
+  Kartenfuß ins Popup, die Karten selbst werden aktionsfrei.
+  - Technisch ähnlich zum bestehenden `book-dialog`/`confirm-dialog`-
+    Muster (`<dialog>`-Element, siehe `library-tracker-panel.js`), aber
+    als reine Info+Aktionen-Ansicht, nicht als Formular — das
+    bestehende Bearbeiten-Formular bleibt wohl als zweiter Schritt
+    (Popup → „Bearbeiten"-Button → bekannter `book-dialog`) bestehen,
+    nicht ersetzt.
+  - Betrifft dieselbe Datei wie die Freitextsuche oben
+    (`library-tracker-panel.js`, Bücherliste-Rendering) — beide
+    Features sollten nicht als parallele Jules-Sessions laufen, um
+    Merge-Konflikte zu vermeiden.
+  - Offen: ob dieses Popup langfristig auch der richtige Ort für die
+    KI-Serienvorschläge aus #12 wird (aktuell dort als Button auf der
+    Karte selbst geplant) — beim Zuschnitt mit bedenken.
