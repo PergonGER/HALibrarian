@@ -266,7 +266,10 @@ body {
 /* Books Grid & Cards */
 .lt-books-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  /* Default: automatic column count based on available width. Overridden
+     inline (style="--lt-books-columns: N") when the user picks a fixed
+     count in Einstellungen; falls back to auto-fill otherwise. */
+  grid-template-columns: var(--lt-books-columns, repeat(auto-fill, minmax(280px, 1fr)));
   gap: 16px;
 }
 

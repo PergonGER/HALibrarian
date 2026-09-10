@@ -247,18 +247,27 @@ class LibraryTrackerDatabase:
             return cursor.rowcount > 0
 
     def get_authors(self) -> list[dict[str, Any]]:
-        """Retrieve all authors."""
+        """Retrieve all authors with at least one book, plus favorites.
+
+        Authors with zero books are hidden (they're just clutter, usually
+        left over from a deleted book) unless marked as favorite - a
+        favorited author with no current books is a deliberate "track
+        their future releases" entry (see Session 4 author-tracking) and
+        must stay visible.
+        """
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 SELECT
-                    id,
-                    name,
-                    is_favorite,
-                    rating
-                FROM Authors
-                ORDER BY name ASC
+                    a.id,
+                    a.name,
+                    a.is_favorite,
+                    a.rating
+                FROM Authors a
+                WHERE a.is_favorite = 1
+                   OR EXISTS (SELECT 1 FROM Books b WHERE b.author_id = a.id)
+                ORDER BY a.name ASC
                 """
             )
             rows = cursor.fetchall()

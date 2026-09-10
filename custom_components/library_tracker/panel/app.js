@@ -45,6 +45,16 @@ function applySettings(settings) {
   } else {
     delete document.documentElement.dataset.theme;
   }
+
+  const booksGrid = document.getElementById("books-list");
+  if (booksGrid) {
+    const cols = parseInt(settings.columns, 10);
+    if (cols >= 1 && cols <= 4) {
+      booksGrid.style.setProperty("--lt-books-columns", `repeat(${cols}, 1fr)`);
+    } else {
+      booksGrid.style.removeProperty("--lt-books-columns");
+    }
+  }
 }
 
 // Toast Notifications
@@ -614,6 +624,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const settings = loadSettings();
       document.getElementById("settings-title").value = settings.title || "";
       document.getElementById("settings-theme").value = settings.theme || "system";
+      document.getElementById("settings-columns").value = settings.columns || "auto";
       settingsDialog.showModal();
     });
   }
@@ -630,6 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const settings = {
         title: document.getElementById("settings-title").value.trim(),
         theme: document.getElementById("settings-theme").value,
+        columns: document.getElementById("settings-columns").value,
       };
       saveSettings(settings);
       applySettings(settings);
@@ -645,6 +657,7 @@ document.addEventListener("DOMContentLoaded", () => {
       applySettings({});
       document.getElementById("settings-title").value = "";
       document.getElementById("settings-theme").value = "system";
+      document.getElementById("settings-columns").value = "auto";
       showToast("Einstellungen zurückgesetzt.");
     });
   }
