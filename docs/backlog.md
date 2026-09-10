@@ -71,28 +71,27 @@ nur eine Merkliste, damit nichts verloren geht.
     Google-Books-Suche) — Nutzer sollte das vorher absehen können
     (Rate-Limits/Kosten seines KI-Providers).
 - **Buch hinzufügen: Teilangaben reichen, Rest wird automatisch
-  ergänzt** (Nutzerwunsch 2026-09-10): Statt zwingend ISBN oder
-  vollständigem Titel+Autor genügt eine Teilangabe (z. B. nur der
-  Titel, evtl. mit Tippfehlern), der Rest wird automatisch ausgefüllt.
-  **Zweistufiger Ansatz, nicht direkt auf KI springen:**
-  1. **Primärweg — deterministische Google-Books-Freitextsuche, keine
-     KI:** Derselbe Endpunkt, den `api.py` schon für die ISBN-Suche
-     nutzt (`googleapis.com/books/v1/volumes?q=...`), unterstützt über
-     denselben `q`-Parameter auch Freitext- und feldbeschränkte Suchen
-     (`intitle:`, `inauthor:` statt `isbn:`) und liefert bei Treffern
-     echte, strukturierte Daten (Titel, Autor, ISBN, Cover,
-     Erscheinungsdatum) — ohne Halluzinationsrisiko. Bei mehreren
-     Treffern: Trefferliste zur Auswahl statt automatisch den ersten zu
-     nehmen. Das deckt vermutlich den Großteil der Fälle ab und sollte
-     zuerst gebaut werden, unabhängig von `ai_task`/Gemini.
-  2. **Fallback — Gemini/`ai_task`, nur wenn (1) nichts findet:**
-     gleiches „KI-Vorschlag, ungeprüft"-Prinzip wie bei #12/Regalfoto —
-     Ergebnis vor Übernahme durch den Nutzer bestätigen lassen, nicht
-     blind in die Bibliothek schreiben (Gemini kann ISBN/Erscheinungs-
-     datum erfinden, wo eine echte Datenbank die richtigen liefert).
-     Sinnvollerweise **nach** #12 angehen (gleiche Infrastruktur/UI-
-     Muster wiederverwendbar).
-  Offener Punkt: Wie die UI das im bestehenden „Buch hinzufügen"-Dialog
-  abbildet (z. B. ISBN-Feld optional machen, neues Freitext-Suchfeld
-  statt/neben ISBN, Trefferliste vor dem eigentlichen Formular) ist noch
-  nicht entschieden.
+  ergänzt** (Nutzerwunsch 2026-09-10, entschieden): Statt zwingend ISBN
+  oder vollständigem Titel+Autor genügt eine Teilangabe (z. B. nur der
+  Titel). Ausschließlich über die deterministische Google-Books-
+  Freitextsuche gelöst, **kein** Gemini/`ai_task`-Fallback — Nutzer-
+  Entscheidung: Wenn Google Books bei mehreren Treffern (per KI-
+  Snippet-Ranking) schon nichts Eindeutiges findet, bringt Gemini
+  vermutlich auch nichts mehr, der Zusatzaufwand lohnt sich nicht.
+  - Derselbe Endpunkt, den `api.py` schon für die ISBN-Suche nutzt
+    (`googleapis.com/books/v1/volumes?q=...`), unterstützt über
+    denselben `q`-Parameter auch Freitext-/feldbeschränkte Suche
+    (`intitle:`, `inauthor:` statt `isbn:`) mit echten, strukturierten
+    Treffern (Titel, Autor, ISBN, Cover, Erscheinungsdatum). Bei
+    mehreren Treffern: Trefferliste zur Auswahl statt automatisch den
+    ersten zu nehmen.
+  - **Pflichtfelder im „Buch hinzufügen"-Dialog müssen dafür geändert
+    werden**: ISBN/Titel/Autor sind aktuell `required` im Formular
+    (`index.html`/`library-tracker-panel.js`) — das widerspricht der
+    Idee, dass eine Teilangabe zum Suchen reicht. Umbau nötig: Freitext-
+    Suchfeld (statt/vor dem heutigen ISBN-Pflichtfeld) → Trefferliste →
+    Formular wird vorausgefüllt, manuelle Eingabe ohne Treffer bleibt
+    weiterhin möglich (dann wie bisher mit Pflichtfeldern).
+  - **Reihenfolge:** Erst nach dem Merge von PR #16 (`panel_custom`-
+    Migration) angehen — betrifft dieselben Dateien
+    (Formular/Bücher-hinzufügen-UI), die #16 gerade umbaut.
