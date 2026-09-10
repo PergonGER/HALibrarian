@@ -188,19 +188,29 @@ class LibraryTrackerPanel extends HTMLElement {
             <input type="hidden" id="form-series-id" value="" />
             <input type="hidden" id="form-series-order" value="" />
 
+            <div class="lt-form__group" id="form-text-search-group">
+              <label for="form-text-search">Freitextsuche (Google Books)</label>
+              <div class="lt-search-box" style="max-width: 100%;">
+                <input type="text" id="form-text-search" placeholder="Titel und/oder Autor eingeben" />
+                <button type="button" id="btn-text-search" class="lt-btn lt-btn--primary">Suchen</button>
+              </div>
+            </div>
+
+            <div id="text-search-results" class="lt-search-results" hidden></div>
+
             <div class="lt-form__group">
               <label for="form-isbn">ISBN *</label>
-              <input type="text" id="form-isbn" required placeholder="z. B. 9783453318113" />
+              <input type="text" id="form-isbn" placeholder="z. B. 9783453318113" />
             </div>
 
             <div class="lt-form__group">
               <label for="form-title">Titel *</label>
-              <input type="text" id="form-title" required placeholder="Buchtitel" />
+              <input type="text" id="form-title" placeholder="Buchtitel" />
             </div>
 
             <div class="lt-form__group">
               <label for="form-author">Autor *</label>
-              <input type="text" id="form-author" required placeholder="Autor Name" />
+              <input type="text" id="form-author" placeholder="Autor Name" />
             </div>
 
             <div class="lt-form__group">
@@ -215,7 +225,7 @@ class LibraryTrackerPanel extends HTMLElement {
 
             <div class="lt-form__group">
               <label for="form-status">Status *</label>
-              <select id="form-status" required>
+              <select id="form-status">
                 <option value="ungelesen">ungelesen</option>
                 <option value="gelesen">gelesen</option>
                 <option value="wunschliste">wunschliste</option>
@@ -686,6 +696,20 @@ class LibraryTrackerPanel extends HTMLElement {
 
     form.reset();
 
+    const textSearchInput = this.$("#form-text-search");
+    if (textSearchInput) textSearchInput.value = "";
+
+    const resultsContainer = this.$("#text-search-results");
+    if (resultsContainer) {
+      resultsContainer.hidden = true;
+      resultsContainer.innerHTML = "";
+    }
+
+    const textSearchGroup = this.$("#form-text-search-group");
+    if (textSearchGroup) {
+      textSearchGroup.hidden = !!book;
+    }
+
     const starsContainer = this.$("#form-rating-stars");
     starsContainer.innerHTML = "";
     const ratingValInput = this.$("#form-rating-val");
@@ -726,7 +750,85 @@ class LibraryTrackerPanel extends HTMLElement {
 
   _closeBookDialog() {
     const dialog = this.$("#book-dialog");
+    const textSearchInput = this.$("#form-text-search");
+    if (textSearchInput) textSearchInput.value = "";
+
+    const resultsContainer = this.$("#text-search-results");
+    if (resultsContainer) {
+      resultsContainer.hidden = true;
+      resultsContainer.innerHTML = "";
+    }
+
     dialog.hidden = true;
+  }
+
+  async _handleTextSearch() {
+    const searchInput = this.$("#form-text-search");
+    const resultsContainer = this.$("#text-search-results");
+    if (!searchInput || !resultsContainer) return;
+
+    const query = searchInput.value.trim();
+    if (!query) {
+      this._showToast("Bitte einen Suchbegriff eingeben.", true);
+      return;
+    }
+
+    resultsContainer.innerHTML = '<div class="lt-search-results__empty">Suche nach Treffern …</div>';
+    resultsContainer.hidden = false;
+
+    try {
+      const results = await this._hass.callWS({
+        type: "library_tracker/books/search_text",
+        query: query,
+      });
+
+      resultsContainer.innerHTML = "";
+      if (!results || results.length === 0) {
+        resultsContainer.innerHTML = '<div class="lt-search-results__empty">Keine Treffer gefunden, bitte manuell eingeben</div>';
+        return;
+      }
+
+      results.forEach((item) => {
+        const itemEl = document.createElement("div");
+        itemEl.className = "lt-search-result-item";
+
+        let coverHtml = item.cover_url
+          ? `<img src="${this._escapeHtml(item.cover_url)}" class="lt-search-result-item__cover" alt="Cover" />`
+          : `<div class="lt-search-result-item__cover">📖</div>`;
+
+        let dateHtml = item.published_date
+          ? `<span class="lt-search-result-item__date"> (${this._escapeHtml(item.published_date)})</span>`
+          : "";
+
+        itemEl.innerHTML = `
+          ${coverHtml}
+          <div class="lt-search-result-item__info">
+            <div class="lt-search-result-item__title">${this._escapeHtml(item.title)}${dateHtml}</div>
+            <div class="lt-search-result-item__author">${this._escapeHtml(item.author)}</div>
+            ${item.isbn ? `<div class="lt-search-result-item__isbn">ISBN: ${this._escapeHtml(item.isbn)}</div>` : ""}
+          </div>
+          <button type="button" class="lt-btn lt-btn--secondary lt-btn--sm btn-select-result">Auswählen</button>
+        `;
+
+        itemEl.querySelector(".btn-select-result").addEventListener("click", () => {
+          this.$("#form-title").value = item.title || "";
+          this.$("#form-author").value = item.author || "";
+          this.$("#form-isbn").value = item.isbn || "";
+          this.$("#form-published-date").value = item.published_date || "";
+          this.$("#form-cover-url").value = item.cover_url || "";
+          this.$("#form-series-id").value = item.series_id || "";
+          this.$("#form-series-order").value = item.series_order != null ? item.series_order : "";
+
+          resultsContainer.hidden = true;
+          resultsContainer.innerHTML = "";
+          this._showToast("Metadaten übernommen.");
+        });
+
+        resultsContainer.appendChild(itemEl);
+      });
+    } catch (err) {
+      resultsContainer.innerHTML = `<div class="lt-search-results__empty">Fehler bei der Suche: ${this._escapeHtml(err.message || err)}</div>`;
+    }
   }
 
   _showConfirmDialog(message) {
@@ -976,6 +1078,21 @@ class LibraryTrackerPanel extends HTMLElement {
     this.$("#btn-open-add-dialog").addEventListener("click", () => this._openBookDialog());
     this.$("#btn-close-dialog").addEventListener("click", () => this._closeBookDialog());
     this.$("#btn-cancel-dialog").addEventListener("click", () => this._closeBookDialog());
+
+    const btnTextSearch = this.$("#btn-text-search");
+    if (btnTextSearch) {
+      btnTextSearch.addEventListener("click", () => this._handleTextSearch());
+    }
+
+    const textSearchInput = this.$("#form-text-search");
+    if (textSearchInput) {
+      textSearchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this._handleTextSearch();
+        }
+      });
+    }
 
     // Form Submission (Add or Edit)
     this.$("#book-form").addEventListener("submit", async (e) => {

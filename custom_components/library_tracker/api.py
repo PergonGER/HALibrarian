@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 from typing import Any
+from urllib.parse import quote
 
 from aiohttp import ClientError
 from homeassistant.core import HomeAssistant
@@ -56,6 +57,133 @@ async def async_lookup_isbn(
     return None
 
 
+def _parse_google_book_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    """Parse a single volume item from Google Books API response."""
+    if not isinstance(item, dict):
+        return None
+
+    volume_info = item.get("volumeInfo")
+    if not isinstance(volume_info, dict):
+        return None
+
+    title = str(volume_info.get("title", "")).strip()
+    if not title:
+        return None
+
+    authors_list = volume_info.get("authors")
+    if isinstance(authors_list, list) and authors_list:
+        author = ", ".join(str(a) for a in authors_list if a)
+    else:
+        author = "Unbekannter Autor"
+
+    published_date = str(volume_info.get("publishedDate", ""))
+
+    image_links = volume_info.get("imageLinks")
+    cover_url = ""
+    if isinstance(image_links, dict):
+        raw_cover = image_links.get("thumbnail") or image_links.get("smallThumbnail")
+        if raw_cover and isinstance(raw_cover, str):
+            cover_url = raw_cover
+            if cover_url.startswith("http://"):
+                cover_url = "https://" + cover_url[7:]
+
+    isbn = ""
+    industry_identifiers = volume_info.get("industryIdentifiers")
+    if isinstance(industry_identifiers, list):
+        isbn_13 = ""
+        isbn_10 = ""
+        other_isbn = ""
+        for ident in industry_identifiers:
+            if isinstance(ident, dict):
+                ident_type = str(ident.get("type", ""))
+                val = clean_isbn(str(ident.get("identifier", "")))
+                if ident_type == "ISBN_13":
+                    isbn_13 = val
+                elif ident_type == "ISBN_10":
+                    isbn_10 = val
+                elif "ISBN" in ident_type:
+                    other_isbn = val
+        isbn = isbn_13 or isbn_10 or other_isbn
+
+    series_id: str | None = None
+    series_order: int | None = None
+    series_info = volume_info.get("seriesInfo")
+    if isinstance(series_info, dict):
+        volume_series = series_info.get("volumeSeries")
+        if isinstance(volume_series, list) and volume_series:
+            first_series = volume_series[0]
+            if isinstance(first_series, dict):
+                s_id = first_series.get("seriesId")
+                if s_id and isinstance(s_id, str):
+                    series_id = s_id
+                raw_order = first_series.get("orderNumber")
+                if raw_order is not None:
+                    try:
+                        series_order = int(raw_order)
+                    except (ValueError, TypeError):
+                        series_order = None
+
+    return {
+        "isbn": isbn,
+        "title": title,
+        "author": author,
+        "published_date": published_date,
+        "cover_url": cover_url,
+        "series_id": series_id,
+        "series_order": series_order,
+        "source": "google_books",
+    }
+
+
+async def async_search_books_by_text(
+    session: Any, query: str, api_key: str | None = None
+) -> list[dict[str, Any]]:
+    """Search Google Books by free text query.
+
+    Returns a list of dicts with book metadata (up to 10 results),
+    or an empty list if no items found or on network/timeout error.
+    """
+    clean_query = query.strip()
+    if not clean_query:
+        return []
+
+    url = f"https://www.googleapis.com/books/v1/volumes?q={quote(clean_query)}&maxResults=10"
+    if api_key:
+        url += f"&key={api_key}"
+
+    try:
+        async with asyncio.timeout(REQUEST_TIMEOUT):
+            async with session.get(url) as response:
+                if response.status != 200:
+                    _LOGGER.debug(
+                        "Google Books API returned status %s for query %s",
+                        response.status,
+                        clean_query,
+                    )
+                    return []
+                data = await response.json()
+
+        total_items = data.get("totalItems", 0)
+        items = data.get("items", [])
+        if total_items == 0 or not items or not isinstance(items, list):
+            return []
+
+        results: list[dict[str, Any]] = []
+        for item in items:
+            parsed = _parse_google_book_item(item)
+            if parsed:
+                results.append(parsed)
+
+        return results
+
+    except (ClientError, asyncio.TimeoutError) as err:
+        _LOGGER.debug("Error querying Google Books API for query %s: %s", clean_query, err)
+        return []
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("Unexpected error parsing Google Books response for query %s", clean_query)
+        return []
+
+
 async def _async_query_google_books(
     session: Any, isbn: str, api_key: str | None
 ) -> dict[str, Any] | None:
@@ -78,52 +206,17 @@ async def _async_query_google_books(
 
         total_items = data.get("totalItems", 0)
         items = data.get("items", [])
-        if total_items == 0 or not items:
+        if total_items == 0 or not items or not isinstance(items, list):
             return None
 
-        volume_info = items[0].get("volumeInfo", {})
-        title = volume_info.get("title", "").strip()
-        if not title:
+        parsed = _parse_google_book_item(items[0])
+        if parsed is None:
             return None
 
-        authors_list = volume_info.get("authors", [])
-        author = ", ".join(authors_list) if authors_list else "Unbekannter Autor"
+        if not parsed["isbn"]:
+            parsed["isbn"] = isbn
 
-        published_date = volume_info.get("publishedDate", "")
-
-        image_links = volume_info.get("imageLinks", {})
-        cover_url = image_links.get("thumbnail") or image_links.get("smallThumbnail")
-        if cover_url and cover_url.startswith("http://"):
-            cover_url = "https://" + cover_url[7:]
-
-        series_id: str | None = None
-        series_order: int | None = None
-        series_info = volume_info.get("seriesInfo")
-        if isinstance(series_info, dict):
-            volume_series = series_info.get("volumeSeries")
-            if isinstance(volume_series, list) and volume_series:
-                first_series = volume_series[0]
-                if isinstance(first_series, dict):
-                    s_id = first_series.get("seriesId")
-                    if s_id and isinstance(s_id, str):
-                        series_id = s_id
-                    raw_order = first_series.get("orderNumber")
-                    if raw_order is not None:
-                        try:
-                            series_order = int(raw_order)
-                        except (ValueError, TypeError):
-                            series_order = None
-
-        return {
-            "isbn": isbn,
-            "title": title,
-            "author": author,
-            "published_date": published_date,
-            "cover_url": cover_url or "",
-            "series_id": series_id,
-            "series_order": series_order,
-            "source": "google_books",
-        }
+        return parsed
 
     except (ClientError, asyncio.TimeoutError) as err:
         # Expected failure mode (network/timeout) - fall back to the next

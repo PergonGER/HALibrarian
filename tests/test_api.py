@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from custom_components.library_tracker.api import (
     async_lookup_isbn,
+    async_search_books_by_text,
     clean_isbn,
 )
 
@@ -146,3 +147,84 @@ async def test_async_lookup_isbn_not_found() -> None:
         result = await async_lookup_isbn(mock_hass, "0000000000000")
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_async_search_books_by_text_success() -> None:
+    """Test free text search with Google Books API returning results."""
+    mock_session = MagicMock()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.json = AsyncMock(
+        return_value={
+            "totalItems": 2,
+            "items": [
+                {
+                    "volumeInfo": {
+                        "title": "Der Schwarm",
+                        "authors": ["Frank Schätzing"],
+                        "publishedDate": "2004",
+                        "imageLinks": {
+                            "thumbnail": "http://books.google.com/schwarm.jpg"
+                        },
+                        "industryIdentifiers": [
+                            {"type": "ISBN_10", "identifier": "3462033743"},
+                            {"type": "ISBN_13", "identifier": "9783462033748"},
+                        ],
+                    }
+                },
+                {
+                    "volumeInfo": {
+                        "title": "Limit",
+                        "authors": ["Frank Schätzing"],
+                        "publishedDate": "2009",
+                    }
+                },
+            ],
+        }
+    )
+
+    cm = AsyncMock()
+    cm.__aenter__.return_value = mock_resp
+    mock_session.get.return_value = cm
+
+    results = await async_search_books_by_text(
+        mock_session, "Frank Schätzing", api_key="key123"
+    )
+
+    assert len(results) == 2
+    assert results[0]["title"] == "Der Schwarm"
+    assert results[0]["author"] == "Frank Schätzing"
+    assert results[0]["isbn"] == "9783462033748"
+    assert results[0]["cover_url"] == "https://books.google.com/schwarm.jpg"
+
+    assert results[1]["title"] == "Limit"
+    assert results[1]["author"] == "Frank Schätzing"
+    assert results[1]["isbn"] == ""
+
+
+@pytest.mark.asyncio
+async def test_async_search_books_by_text_empty_query() -> None:
+    """Test searching with an empty query."""
+    mock_session = MagicMock()
+    results = await async_search_books_by_text(mock_session, "   ")
+    assert results == []
+    mock_session.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_async_search_books_by_text_no_results() -> None:
+    """Test search returning no items."""
+    mock_session = MagicMock()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.json = AsyncMock(return_value={"totalItems": 0})
+
+    cm = AsyncMock()
+    cm.__aenter__.return_value = mock_resp
+    mock_session.get.return_value = cm
+
+    results = await async_search_books_by_text(mock_session, "Unknown Query")
+    assert results == []
