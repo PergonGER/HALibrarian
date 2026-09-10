@@ -292,11 +292,31 @@ function renderAuthors(authors) {
     const item = document.createElement("div");
     item.className = "lt-author-item";
     item.innerHTML = `
-      <span class="lt-author-item__name">${escapeHtml(author.name)}</span>
+      <span class="lt-author-item__name lt-author-item__name--clickable" title="Bücher von ${escapeHtml(author.name)} anzeigen">${escapeHtml(author.name)}</span>
       <button class="lt-fav-btn" title="Lieblingsautor umschalten">
         ${author.is_favorite ? "⭐" : "☆"}
       </button>
     `;
+
+    // Clicking the name jumps to the Bücher tab, filtered to this author
+    // (reuses the existing free-text search, reset to "Alle" status so
+    // every book of theirs shows regardless of read status).
+    item.querySelector(".lt-author-item__name").addEventListener("click", () => {
+      switchToTab("tab-books");
+
+      document.querySelectorAll(".lt-chip").forEach((chip) => {
+        chip.classList.toggle("lt-chip--active", chip.dataset.filter === "all");
+      });
+      currentFilter = "all";
+
+      const searchInput = document.getElementById("books-search-input");
+      if (searchInput) {
+        searchInput.value = author.name;
+      }
+      currentSearchQuery = author.name;
+
+      loadBooks();
+    });
 
     item.querySelector(".lt-fav-btn").addEventListener("click", async () => {
       const newFav = !author.is_favorite;
@@ -420,10 +440,13 @@ function startScanner() {
       { facingMode: "environment" },
       config,
       (decodedText) => {
-        // Successful scan
+        // Successful scan. html5-qrcode throws if stop() is called
+        // synchronously from inside this callback (it's still mid-frame) -
+        // that exception aborted the callback before handleIsbnLookup ever
+        // ran. Do the lookup first, defer stopping the scanner.
         showToast(`Barcode erkannt: ${decodedText}`);
-        stopScanner();
         handleIsbnLookup(decodedText.trim());
+        setTimeout(() => stopScanner(), 0);
       },
       (errorMessage) => {
         // parse errors occur constantly per frame, ignore
@@ -449,13 +472,19 @@ function startScanner() {
 
 function stopScanner() {
   if (html5QrCode && html5QrCode.isScanning) {
-    html5QrCode
-      .stop()
-      .then(() => {
-        document.getElementById("btn-start-scanner").disabled = false;
-        document.getElementById("btn-stop-scanner").disabled = true;
-      })
-      .catch((err) => console.error("Error stopping scanner", err));
+    try {
+      html5QrCode
+        .stop()
+        .then(() => {
+          document.getElementById("btn-start-scanner").disabled = false;
+          document.getElementById("btn-stop-scanner").disabled = true;
+        })
+        .catch((err) => console.error("Error stopping scanner", err));
+    } catch (err) {
+      // html5-qrcode can throw synchronously (not just reject) if called
+      // while the scanner is mid-transition - see mebjas/html5-qrcode#715.
+      console.error("Error stopping scanner (sync)", err);
+    }
   }
 }
 
@@ -470,24 +499,27 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+// Switches the visible tab (also usable from outside the nav click
+// handlers, e.g. clicking an author name to jump to their books).
+function switchToTab(tabId) {
+  document.querySelectorAll(".lt-nav__btn").forEach((b) => {
+    b.classList.toggle("lt-nav__btn--active", b.dataset.tab === tabId);
+  });
+  document.querySelectorAll(".lt-tab-content").forEach((tab) => {
+    tab.hidden = tab.id !== tabId;
+  });
+  if (tabId !== "tab-scanner") {
+    stopScanner();
+  }
+}
+
 // DOM Event Listeners Initialization
 document.addEventListener("DOMContentLoaded", () => {
   // Navigation Tabs
   const navBtns = document.querySelectorAll(".lt-nav__btn");
   navBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
-      navBtns.forEach((b) => b.classList.remove("lt-nav__btn--active"));
-      btn.classList.add("lt-nav__btn--active");
-
-      const tabId = btn.dataset.tab;
-      document.querySelectorAll(".lt-tab-content").forEach((tab) => {
-        tab.hidden = tab.id !== tabId;
-      });
-
-      // Stop scanner if switching away from scanner tab
-      if (tabId !== "tab-scanner") {
-        stopScanner();
-      }
+      switchToTab(btn.dataset.tab);
     });
   });
 
