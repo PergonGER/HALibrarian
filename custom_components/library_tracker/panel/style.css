@@ -383,6 +383,62 @@ body {
   text-decoration: underline;
 }
 
+.lt-badge--ai {
+  background: rgba(103, 58, 183, 0.15);
+  color: #7e57c2;
+  border: 1px dashed #7e57c2;
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+
+.lt-ai-series-result {
+  margin-top: 8px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 6px;
+  border: 1px solid var(--lt-divider);
+}
+
+.lt-ai-series-loading {
+  font-size: 13px;
+  color: var(--lt-text-secondary);
+  font-style: italic;
+}
+
+.lt-ai-series-info {
+  margin: 6px 0 0 0;
+  font-size: 13px;
+  color: var(--lt-text-secondary);
+}
+
+.lt-ai-series-title {
+  font-weight: 500;
+  font-size: 13px;
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+
+.lt-ai-series-list {
+  margin: 4px 0 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.lt-ai-series-list li {
+  margin-bottom: 3px;
+}
+
+.lt-ai-book-item {
+  font-weight: 400;
+}
+
+.lt-ai-in-lib-tag {
+  font-size: 11px;
+  color: var(--lt-success);
+  font-weight: 500;
+  margin-left: 4px;
+}
+
 .lt-alert--info {
   background: rgba(3, 169, 244, 0.15);
   color: var(--lt-primary);

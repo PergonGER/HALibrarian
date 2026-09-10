@@ -13,7 +13,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 from homeassistant.loader import async_get_integration
 
-from .api import async_lookup_isbn, async_search_books_by_text
+from .api import (
+    async_ai_lookup_series,
+    async_lookup_isbn,
+    async_search_books_by_text,
+)
 from .const import CONF_GOOGLE_BOOKS_API_KEY, DOMAIN
 from .db import LibraryTrackerDatabase
 
@@ -357,6 +361,40 @@ async def ws_books_search_text(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "library_tracker/books/ai_series_lookup",
+        vol.Required("book_id"): vol.Coerce(int),
+    }
+)
+@websocket_api.async_response
+async def ws_books_ai_series_lookup(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Look up book series suggestions using AI Task platform."""
+    try:
+        db = _get_db(hass)
+        book_id = msg.get("book_id")
+        if book_id is None:
+            connection.send_error(
+                msg["id"], "invalid_format", "book_id is required"
+            )
+            return
+
+        book = await hass.async_add_executor_job(db.get_book, book_id)
+        if book is None:
+            connection.send_error(
+                msg["id"], "not_found", f"Book with id {book_id} not found"
+            )
+            return
+
+        result = await async_ai_lookup_series(hass, book["title"], book["author"])
+        connection.send_result(msg["id"], result)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/books/ai_series_lookup: %s", err)
+        connection.send_error(msg["id"], "ai_task_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "library_tracker/version",
     }
 )
@@ -392,6 +430,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_authors_set_rating)
     websocket_api.async_register_command(hass, ws_lookup_isbn)
     websocket_api.async_register_command(hass, ws_books_search_text)
+    websocket_api.async_register_command(hass, ws_books_ai_series_lookup)
     websocket_api.async_register_command(hass, ws_version)
 
     hass.data.setdefault(DOMAIN, {})["ws_commands_registered"] = True

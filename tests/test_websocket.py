@@ -54,7 +54,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 11
+        assert mock_register.call_count == 12
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -429,3 +429,104 @@ async def test_ws_books_search_text(mock_hass: HomeAssistant) -> None:
         )
 
     conn.send_result.assert_called_once_with(1, fake_results)
+
+
+@pytest.mark.asyncio
+async def test_ws_books_ai_series_lookup_success(mock_hass: HomeAssistant) -> None:
+    """Test ws_books_ai_series_lookup WebSocket handler on success."""
+    conn = MagicMock()
+
+    # First add a book
+    add_msg = {
+        "id": 1,
+        "type": "library_tracker/books/add",
+        "isbn": "9783551551672",
+        "title": "Harry Potter 1",
+        "author": "J.K. Rowling",
+        "status": "ungelesen",
+    }
+    await inspect.unwrap(ws_books_add)(mock_hass, conn, add_msg)
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    conn.reset_mock()
+    fake_ai_res = {
+        "is_series": True,
+        "series_name": "Harry Potter",
+        "books": [{"title": "Harry Potter 1", "order": 1}],
+    }
+
+    from custom_components.library_tracker.websocket_api import (
+        ws_books_ai_series_lookup,
+    )
+
+    with patch(
+        "custom_components.library_tracker.websocket_api.async_ai_lookup_series",
+        return_value=fake_ai_res,
+    ):
+        await inspect.unwrap(ws_books_ai_series_lookup)(
+            mock_hass,
+            conn,
+            {
+                "id": 2,
+                "type": "library_tracker/books/ai_series_lookup",
+                "book_id": book_id,
+            },
+        )
+
+    conn.send_result.assert_called_once_with(2, fake_ai_res)
+
+
+@pytest.mark.asyncio
+async def test_ws_books_ai_series_lookup_not_found_and_error(
+    mock_hass: HomeAssistant,
+) -> None:
+    """Test ws_books_ai_series_lookup WebSocket handler error scenarios."""
+    conn = MagicMock()
+    from custom_components.library_tracker.websocket_api import (
+        ws_books_ai_series_lookup,
+    )
+
+    # Book not found
+    await inspect.unwrap(ws_books_ai_series_lookup)(
+        mock_hass,
+        conn,
+        {
+            "id": 1,
+            "type": "library_tracker/books/ai_series_lookup",
+            "book_id": 9999,
+        },
+    )
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "not_found"
+
+    # AI lookup error
+    # First add book
+    conn.reset_mock()
+    add_msg = {
+        "id": 2,
+        "type": "library_tracker/books/add",
+        "isbn": "1111",
+        "title": "Test Title",
+        "author": "Test Author",
+        "status": "ungelesen",
+    }
+    await inspect.unwrap(ws_books_add)(mock_hass, conn, add_msg)
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    conn.reset_mock()
+    with patch(
+        "custom_components.library_tracker.websocket_api.async_ai_lookup_series",
+        side_effect=RuntimeError("AI Task Failed"),
+    ):
+        await inspect.unwrap(ws_books_ai_series_lookup)(
+            mock_hass,
+            conn,
+            {
+                "id": 3,
+                "type": "library_tracker/books/ai_series_lookup",
+                "book_id": book_id,
+            },
+        )
+
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "ai_task_error"
