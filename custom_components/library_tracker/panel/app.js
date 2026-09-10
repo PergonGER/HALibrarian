@@ -231,7 +231,8 @@ function renderBooks(books) {
 
     // Delete Event
     card.querySelector(".btn-delete-book").addEventListener("click", async () => {
-      if (confirm(`Soll "${book.title}" wirklich gelöscht werden?`)) {
+      const confirmed = await showConfirmDialog(`Soll "${book.title}" wirklich gelöscht werden?`);
+      if (confirmed) {
         try {
           await haClient.callWS({
             type: "library_tracker/books/delete",
@@ -386,6 +387,34 @@ function openBookDialog(book = null) {
 function closeBookDialog() {
   const dialog = document.getElementById("book-dialog");
   dialog.close();
+}
+
+// In-app replacement for window.confirm(): the HA Companion App's WebView
+// does not implement JS dialogs (confirm/alert/prompt) unless the host app
+// explicitly adds a handler for them, which it doesn't here - confirm()
+// silently does nothing there. This uses the same <dialog> element pattern
+// as the book-edit dialog instead, which works everywhere.
+function showConfirmDialog(message) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("confirm-dialog");
+    document.getElementById("confirm-dialog-message").textContent = message;
+
+    const btnOk = document.getElementById("btn-confirm-ok");
+    const btnCancel = document.getElementById("btn-confirm-cancel");
+
+    const cleanup = (result) => {
+      btnOk.removeEventListener("click", onOk);
+      btnCancel.removeEventListener("click", onCancel);
+      dialog.close();
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+
+    btnOk.addEventListener("click", onOk);
+    btnCancel.addEventListener("click", onCancel);
+    dialog.showModal();
+  });
 }
 
 // ISBN Lookup & Autofill

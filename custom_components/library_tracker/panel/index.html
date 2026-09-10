@@ -169,6 +169,21 @@
     </div>
   </dialog>
 
+  <!-- CONFIRM DIALOG (replaces window.confirm, which the HA Companion App's
+       WebView does not support) -->
+  <dialog id="confirm-dialog" class="lt-dialog">
+    <div class="lt-dialog__content">
+      <div class="lt-dialog__header">
+        <h3 id="confirm-dialog-title">Bestätigen</h3>
+      </div>
+      <p id="confirm-dialog-message"></p>
+      <div class="lt-form__actions">
+        <button type="button" id="btn-confirm-cancel" class="lt-btn lt-btn--secondary">Abbrechen</button>
+        <button type="button" id="btn-confirm-ok" class="lt-btn lt-btn--danger">Löschen</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- TOAST NOTIFICATIONS -->
   <div id="toast-container" class="lt-toast-container"></div>
 
