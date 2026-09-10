@@ -18,21 +18,26 @@ nur eine Merkliste, damit nichts verloren geht.
   Frontend. Weiterhin nur Verlinkung bereits selbst erfasster Bücher
   möglich (siehe Einschränkung unten) — Issue #12 (KI-gestützte
   Serien-Vorschläge via `ai_task`, ergänzend) adressiert genau diese
-  Lücke, ist aber pausiert bis nach der `panel_custom`-Migration.
+  Lücke, siehe unten.
+- ~~Buch hinzufügen: Teilangaben reichen, Rest wird automatisch
+  ergänzt~~ — umgesetzt 2026-09-10 via Jules-PR #19 (Issue #17,
+  v0.8.0): Google-Books-Freitextsuche im Buch-hinzufügen-Dialog,
+  Pflichtfelder entfernt, Trefferliste zur Auswahl. Bewusst kein
+  Gemini/`ai_task`-Fallback (Nutzer-Entscheidung).
+- ~~Bücherliste: Klick auf Bucheintrag öffnet Detail-Popup~~ —
+  umgesetzt 2026-09-10 via Jules-PR #20 (Issue #18, v0.9.0): Karten
+  kompakt (Cover/Titel/Autor), Detail-Popup mit allen Infos+Aktionen.
+- ~~iOS-Kamera-Scanner defekt (Root Cause: iframe-Sandbox)~~ —
+  umgesetzt 2026-09-10 via Migration auf `panel_custom` (Issue #13,
+  PR #16, v0.7.0) plus Nachfixes für Asset-Pfade/Dialoge/Banner (v0.7.1
+  bis v0.7.3, siehe Commit-Historie). Verbleibende Blockade bei dir war
+  keine Code-Ursache mehr, sondern die `getUserMedia`-Secure-Context-
+  Anforderung (HTTPS) — gelöst durch Einrichtung von Nabu Casa auf
+  deiner Seite. README enthält den Hintergrund für künftige Nutzer mit
+  demselben Problem.
 
 ## Offen
 
-- **iOS-Kamera-Scanner defekt (Root Cause: iframe-Sandbox)** — HA-Cores
-  `ha-panel-iframe.ts` setzt `allow="fullscreen"` ohne `camera` auf dem
-  iframe unseres Panels; von der Integration aus nicht änderbar. Fix:
-  Migration von iframe-Panel auf `panel_custom` (verifiziert 2026-09-10
-  via HA-Dev-Docs + Core-Quellcode: kein Build-Toolchain nötig, reines
-  ES2015-Custom-Element via `panel_custom.async_register_panel(...,
-  module_url=..., embed_iframe=False)`; behebt nebenbei auch die
-  LLAT-Token-pro-Gerät-Friktion, da `hass` dann direkt als Property
-  injiziert wird statt über eigenen WebSocket-Client mit Token). Als
-  Jules-Issue vorgesehen — wird erst gelabelt, sobald keine andere
-  Jules-Session mehr an `index.html`/`app.js` arbeitet.
 - **Serien-seriesId-API-Einschränkung** (Ursprungs-Recherche vom
   2026-09-10, weiterhin relevant für Issue #12): kein Google-Books-API-
   Endpunkt, um nach allen Büchern einer `seriesId` zu suchen, keine
@@ -70,56 +75,8 @@ nur eine Merkliste, damit nichts verloren geht.
     potenziell mehrere Folge-Abfragen (KI-Erkennung + je Titel eine
     Google-Books-Suche) — Nutzer sollte das vorher absehen können
     (Rate-Limits/Kosten seines KI-Providers).
-- **Buch hinzufügen: Teilangaben reichen, Rest wird automatisch
-  ergänzt** (Nutzerwunsch 2026-09-10, entschieden): Statt zwingend ISBN
-  oder vollständigem Titel+Autor genügt eine Teilangabe (z. B. nur der
-  Titel). Ausschließlich über die deterministische Google-Books-
-  Freitextsuche gelöst, **kein** Gemini/`ai_task`-Fallback — Nutzer-
-  Entscheidung: Wenn Google Books bei mehreren Treffern (per KI-
-  Snippet-Ranking) schon nichts Eindeutiges findet, bringt Gemini
-  vermutlich auch nichts mehr, der Zusatzaufwand lohnt sich nicht.
-  - Derselbe Endpunkt, den `api.py` schon für die ISBN-Suche nutzt
-    (`googleapis.com/books/v1/volumes?q=...`), unterstützt über
-    denselben `q`-Parameter auch Freitext-/feldbeschränkte Suche
-    (`intitle:`, `inauthor:` statt `isbn:`) mit echten, strukturierten
-    Treffern (Titel, Autor, ISBN, Cover, Erscheinungsdatum). Bei
-    mehreren Treffern: Trefferliste zur Auswahl statt automatisch den
-    ersten zu nehmen.
-  - **Pflichtfelder im „Buch hinzufügen"-Dialog müssen dafür geändert
-    werden**: ISBN/Titel/Autor sind aktuell `required` im Formular
-    (`index.html`/`library-tracker-panel.js`) — das widerspricht der
-    Idee, dass eine Teilangabe zum Suchen reicht. Umbau nötig: Freitext-
-    Suchfeld (statt/vor dem heutigen ISBN-Pflichtfeld) → Trefferliste →
-    Formular wird vorausgefüllt, manuelle Eingabe ohne Treffer bleibt
-    weiterhin möglich (dann wie bisher mit Pflichtfeldern).
-  - **Reihenfolge:** Als Jules-[Issue #17](https://github.com/PergonGER/HALibrarian/issues/17)
-    angelegt und gelabelt (2026-09-10) — als Erstes von den drei
-    verbliebenen `library-tracker-panel.js`-Features dran.
-- **Bücherliste: Klick auf Bucheintrag öffnet Detail-Popup, ersetzt
-  Karten-Layout** (Nutzerwunsch 2026-09-10, entschieden): Die
-  Bücherliste zeigt künftig nur noch kompakte Zeilen/Kacheln (Cover-
-  Thumbnail, Titel, Autor — deutlich reduzierter Inhalt gegenüber der
-  heutigen `.lt-book-card`). Klick auf einen Eintrag öffnet ein Popup
-  mit allen Details (ISBN, Erscheinungsdatum, Status, Bewertung,
-  Serie/Badge falls vorhanden) **und** allen bisherigen Aktionen
-  (Bearbeiten, Löschen, „Gelesen"-Schnellaktion) — diese wandern vom
-  Kartenfuß ins Popup, die Karten selbst werden aktionsfrei.
-  - Technisch ähnlich zum bestehenden `book-dialog`/`confirm-dialog`-
-    Muster (`<dialog>`-Element, siehe `library-tracker-panel.js`), aber
-    als reine Info+Aktionen-Ansicht, nicht als Formular — das
-    bestehende Bearbeiten-Formular bleibt wohl als zweiter Schritt
-    (Popup → „Bearbeiten"-Button → bekannter `book-dialog`) bestehen,
-    nicht ersetzt.
-  - Betrifft dieselbe Datei wie die Freitextsuche oben
-    (`library-tracker-panel.js`, Bücherliste-Rendering) — beide
-    Features sollten nicht als parallele Jules-Sessions laufen, um
-    Merge-Konflikte zu vermeiden.
-  - Offen: ob dieses Popup langfristig auch der richtige Ort für die
-    KI-Serienvorschläge aus #12 wird (aktuell dort als Button auf der
-    Karte selbst geplant) — beim Zuschnitt mit bedenken.
-  - **Reihenfolge:** Als Jules-[Issue #18](https://github.com/PergonGER/HALibrarian/issues/18)
-    angelegt (2026-09-10), noch **ohne** Label — wird erst gelabelt,
-    sobald Issue #17 (Freitextsuche) gemerged ist (beide betreffen
-    `library-tracker-panel.js`). Issue #12 (KI-Serienvorschläge) folgt
-    danach als drittes, damit die Button-Platzierung gegen das dann
-    bereits existierende Popup entschieden werden kann.
+- **KI-gestützte Serien-Vorschläge** (Issue #12, ergänzt #10) — als
+  letztes der drei `library-tracker-panel.js`-Features gelabelt
+  (2026-09-10, main auf v0.9.0). Issue-Text aktualisiert: Platzierung
+  des Buttons jetzt im Buch-Detail-Popup (#18) statt direkt auf der
+  Karte, da die Karte inzwischen bewusst minimal ist.
