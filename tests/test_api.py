@@ -234,7 +234,7 @@ async def test_async_search_books_by_text_no_results() -> None:
 async def test_async_ai_lookup_series_success() -> None:
     """Test successful AI series lookup."""
     mock_hass = MagicMock()
-    fake_ai_result = {
+    fake_ai_data = {
         "is_series": True,
         "series_name": "Harry Potter",
         "books": [
@@ -242,9 +242,14 @@ async def test_async_ai_lookup_series_success() -> None:
             {"title": "Harry Potter und die Kammer des Schreckens", "order": 2},
         ],
     }
+    # async_generate_data() returns a GenDataTaskResult dataclass with the
+    # structured payload in .data, not a plain dict - mock that shape so
+    # this test actually exercises the real return-value handling.
+    fake_result = MagicMock()
+    fake_result.data = fake_ai_data
 
     mock_ai_task = MagicMock()
-    mock_ai_task.async_generate_data = AsyncMock(return_value=fake_ai_result)
+    mock_ai_task.async_generate_data = AsyncMock(return_value=fake_result)
 
     with patch.dict("sys.modules", {"homeassistant.components.ai_task": mock_ai_task}):
         from custom_components.library_tracker.api import async_ai_lookup_series

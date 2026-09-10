@@ -342,8 +342,12 @@ async def async_ai_lookup_series(
             instructions=instructions,
             structure=schema,
         )
-        if isinstance(result, dict):
-            return result
+        # async_generate_data() returns a GenDataTaskResult dataclass, not a
+        # dict — the structured data matching `structure` lives in .data.
+        # Verified against homeassistant/components/ai_task/task.py.
+        data = result.data
+        if isinstance(data, dict):
+            return data
         return {"is_series": False, "series_name": None, "books": []}
     except Exception as err:
         _LOGGER.warning(
