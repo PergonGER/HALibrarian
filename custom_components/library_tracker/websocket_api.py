@@ -9,10 +9,11 @@ import voluptuous as vol
 
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
 from homeassistant.loader import async_get_integration
 
-from .api import async_lookup_isbn
+from .api import async_lookup_isbn, async_search_books_by_text
 from .const import CONF_GOOGLE_BOOKS_API_KEY, DOMAIN
 from .db import LibraryTrackerDatabase
 
@@ -333,6 +334,29 @@ async def ws_lookup_isbn(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "library_tracker/books/search_text",
+        vol.Required("query"): vol.All(cv.string, vol.Strip, vol.Length(min=1)),
+    }
+)
+@websocket_api.async_response
+async def ws_books_search_text(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Search books by free text query."""
+    try:
+        api_key = _get_google_api_key(hass)
+        session = async_get_clientsession(hass)
+        results = await async_search_books_by_text(
+            session, msg["query"], api_key=api_key
+        )
+        connection.send_result(msg["id"], results)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/books/search_text: %s", err)
+        connection.send_error(msg["id"], "api_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "library_tracker/version",
     }
 )
@@ -367,6 +391,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_authors_set_favorite)
     websocket_api.async_register_command(hass, ws_authors_set_rating)
     websocket_api.async_register_command(hass, ws_lookup_isbn)
+    websocket_api.async_register_command(hass, ws_books_search_text)
     websocket_api.async_register_command(hass, ws_version)
 
     hass.data.setdefault(DOMAIN, {})["ws_commands_registered"] = True

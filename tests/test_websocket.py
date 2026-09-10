@@ -21,6 +21,7 @@ from custom_components.library_tracker.websocket_api import (
     ws_books_add,
     ws_books_delete,
     ws_books_list,
+    ws_books_search_text,
     ws_books_update,
     ws_lookup_isbn,
 )
@@ -53,7 +54,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 10
+        assert mock_register.call_count == 11
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -387,3 +388,44 @@ async def test_ws_lookup_isbn(mock_hass: HomeAssistant) -> None:
         )
 
     conn.send_error.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ws_books_search_text(mock_hass: HomeAssistant) -> None:
+    """Test search_text WebSocket handler."""
+    conn = MagicMock()
+
+    fake_results = [
+        {
+            "isbn": "9783462033748",
+            "title": "Der Schwarm",
+            "author": "Frank Schätzing",
+            "published_date": "2004",
+            "cover_url": "https://books.google.com/schwarm.jpg",
+            "series_id": None,
+            "series_order": None,
+            "source": "google_books",
+        }
+    ]
+
+    with (
+        patch(
+            "custom_components.library_tracker.websocket_api.async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.library_tracker.websocket_api.async_search_books_by_text",
+            return_value=fake_results,
+        ),
+    ):
+        await inspect.unwrap(ws_books_search_text)(
+            mock_hass,
+            conn,
+            {
+                "id": 1,
+                "type": "library_tracker/books/search_text",
+                "query": "Schwarm",
+            },
+        )
+
+    conn.send_result.assert_called_once_with(1, fake_results)
