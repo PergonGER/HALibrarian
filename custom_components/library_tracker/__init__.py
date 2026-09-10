@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from homeassistant.components import frontend
+from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -80,8 +80,9 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 async def _async_register_panel(hass: HomeAssistant) -> None:
     """Serve the static frontend and register the sidebar panel.
 
-    Uses a plain iframe panel loading a static HTML/JS/CSS bundle, so no
-    frontend build toolchain is required.
+    Uses panel_custom with embed_iframe=False to render as a direct ES module
+    custom web component, avoiding iframe permission blocks (e.g. camera on iOS/Safari)
+    and avoiding the need for manual Long-Lived Access Tokens.
     """
     if hass.data[DOMAIN].get("panel_registered"):
         return
@@ -96,13 +97,14 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         ]
     )
 
-    frontend.async_register_built_in_panel(
+    await panel_custom.async_register_panel(
         hass,
-        "iframe",
+        frontend_url_path=PANEL_URL_PATH,
+        webcomponent_name="library-tracker-panel",
+        module_url=f"{STATIC_URL_BASE}/library-tracker-panel.js",
+        embed_iframe=False,
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
-        frontend_url_path=PANEL_URL_PATH,
-        config={"url": f"{STATIC_URL_BASE}/index.html"},
         require_admin=False,
     )
 
