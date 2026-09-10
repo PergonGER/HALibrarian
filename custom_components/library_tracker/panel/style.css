@@ -401,6 +401,16 @@ body {
   margin-bottom: 16px;
 }
 
+/* Any author-stylesheet rule setting `display` beats the UA default
+   [hidden]{display:none} regardless of specificity or source order —
+   author-origin declarations always outrank UA-origin ones in the
+   cascade. The class rule above alone is therefore not enough; without
+   this override the banner stayed visible even with hidden set. Same
+   fix already applied to .lt-dialog-overlay. */
+.lt-series-filter-banner[hidden] {
+  display: none !important;
+}
+
 .lt-book-card__actions {
   display: flex;
   gap: 6px;
