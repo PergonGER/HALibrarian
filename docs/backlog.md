@@ -92,8 +92,9 @@ nur eine Merkliste, damit nichts verloren geht.
     Suchfeld (statt/vor dem heutigen ISBN-Pflichtfeld) → Trefferliste →
     Formular wird vorausgefüllt, manuelle Eingabe ohne Treffer bleibt
     weiterhin möglich (dann wie bisher mit Pflichtfeldern).
-  - **Reihenfolge:** PR #16 (`panel_custom`-Migration) ist gemerged
-    (v0.7.0) — kann jetzt angegangen werden.
+  - **Reihenfolge:** Als Jules-[Issue #17](https://github.com/PergonGER/HALibrarian/issues/17)
+    angelegt und gelabelt (2026-09-10) — als Erstes von den drei
+    verbliebenen `library-tracker-panel.js`-Features dran.
 - **Bücherliste: Klick auf Bucheintrag öffnet Detail-Popup, ersetzt
   Karten-Layout** (Nutzerwunsch 2026-09-10, entschieden): Die
   Bücherliste zeigt künftig nur noch kompakte Zeilen/Kacheln (Cover-
@@ -116,3 +117,9 @@ nur eine Merkliste, damit nichts verloren geht.
   - Offen: ob dieses Popup langfristig auch der richtige Ort für die
     KI-Serienvorschläge aus #12 wird (aktuell dort als Button auf der
     Karte selbst geplant) — beim Zuschnitt mit bedenken.
+  - **Reihenfolge:** Als Jules-[Issue #18](https://github.com/PergonGER/HALibrarian/issues/18)
+    angelegt (2026-09-10), noch **ohne** Label — wird erst gelabelt,
+    sobald Issue #17 (Freitextsuche) gemerged ist (beide betreffen
+    `library-tracker-panel.js`). Issue #12 (KI-Serienvorschläge) folgt
+    danach als drittes, damit die Button-Platzierung gegen das dann
+    bereits existierende Popup entschieden werden kann.
