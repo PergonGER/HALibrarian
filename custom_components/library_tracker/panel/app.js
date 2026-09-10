@@ -276,10 +276,16 @@ function openBookDialog(book = null) {
   }, true);
   starsContainer.appendChild(interactiveStars);
 
+  const isbnInput = document.getElementById("form-isbn");
+
   if (book) {
     titleEl.textContent = "Buch bearbeiten";
     document.getElementById("form-book-id").value = book.id;
-    document.getElementById("form-isbn").value = book.isbn || "";
+    isbnInput.value = book.isbn || "";
+    // ISBN is immutable once a book exists - library_tracker/books/update
+    // doesn't accept an isbn field, so editing it here would silently be
+    // discarded. Disable it rather than imply the change would save.
+    isbnInput.readOnly = true;
     document.getElementById("form-title").value = book.title || "";
     document.getElementById("form-author").value = book.author || "";
     document.getElementById("form-published-date").value = book.published_date || "";
@@ -288,6 +294,7 @@ function openBookDialog(book = null) {
   } else {
     titleEl.textContent = "Buch hinzufügen";
     document.getElementById("form-book-id").value = "";
+    isbnInput.readOnly = false;
     document.getElementById("form-status").value = "ungelesen";
   }
 
@@ -469,6 +476,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const status = document.getElementById("form-status").value;
     const ratingStr = document.getElementById("form-rating-val").value;
     const rating = ratingStr ? parseInt(ratingStr, 10) : null;
+
+    if (!title || !author || (!bookId && !isbn)) {
+      showToast("Titel, Autor und ISBN dürfen nicht leer sein.", true);
+      return;
+    }
 
     try {
       if (bookId) {
