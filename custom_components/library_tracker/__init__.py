@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from homeassistant.components import frontend
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -65,7 +64,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         k for k in domain_data.keys() if k not in ("db", "panel_registered", "ws_commands_registered")
     ]
     if not remaining_entries:
-        frontend.async_remove_panel(hass, PANEL_URL_PATH)
+        frontend = hass.components.frontend
+        frontend.async_remove_panel(PANEL_URL_PATH)
         domain_data.pop("db", None)
         domain_data.pop("panel_registered", None)
 
@@ -96,8 +96,8 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         ]
     )
 
+    frontend = hass.components.frontend
     frontend.async_register_built_in_panel(
-        hass,
         "iframe",
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
