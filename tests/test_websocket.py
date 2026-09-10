@@ -53,7 +53,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 8
+        assert mock_register.call_count == 10
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -271,6 +271,81 @@ async def test_ws_authors_set_rating(mock_hass: HomeAssistant) -> None:
     )
     conn.send_error.assert_called_once()
     assert conn.send_error.call_args[0][1] == "invalid_format"
+
+
+@pytest.mark.asyncio
+async def test_ws_books_list_by_series(mock_hass: HomeAssistant) -> None:
+    """Test listing books by series via WebSocket handler."""
+    conn = MagicMock()
+
+    # Add 2 books in same series
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 1,
+            "type": "library_tracker/books/add",
+            "isbn": "111",
+            "title": "Series Vol 1",
+            "author": "Author A",
+            "status": "gelesen",
+            "series_id": "series_test",
+            "series_order": 1,
+        },
+    )
+    b1_id = conn.send_result.call_args[0][1]["id"]
+
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 2,
+            "type": "library_tracker/books/add",
+            "isbn": "222",
+            "title": "Series Vol 2",
+            "author": "Author A",
+            "status": "ungelesen",
+            "series_id": "series_test",
+            "series_order": 2,
+        },
+    )
+    b2_id = conn.send_result.call_args[0][1]["id"]
+
+    # List all in series
+    conn.reset_mock()
+    from custom_components.library_tracker.websocket_api import ws_books_list_by_series
+
+    await inspect.unwrap(ws_books_list_by_series)(
+        mock_hass,
+        conn,
+        {
+            "id": 3,
+            "type": "library_tracker/books/list_by_series",
+            "series_id": "series_test",
+        },
+    )
+    conn.send_result.assert_called_once()
+    series_books = conn.send_result.call_args[0][1]
+    assert len(series_books) == 2
+    assert series_books[0]["id"] == b1_id
+    assert series_books[1]["id"] == b2_id
+
+    # List with exclude_book_id
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_list_by_series)(
+        mock_hass,
+        conn,
+        {
+            "id": 4,
+            "type": "library_tracker/books/list_by_series",
+            "series_id": "series_test",
+            "exclude_book_id": b1_id,
+        },
+    )
+    conn.send_result.assert_called_once()
+    series_books_filtered = conn.send_result.call_args[0][1]
+    assert len(series_books_filtered) == 1
+    assert series_books_filtered[0]["id"] == b2_id
 
 
 @pytest.mark.asyncio

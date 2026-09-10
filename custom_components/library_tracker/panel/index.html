@@ -64,6 +64,11 @@
           <button id="btn-open-add-dialog" class="lt-btn lt-btn--primary">+ Buch hinzufügen</button>
         </div>
 
+        <div id="series-filter-banner" class="lt-alert lt-alert--info" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;" hidden>
+          <span>📚 Filter: Bücher derselben Buchreihe</span>
+          <button id="btn-clear-series-filter" class="lt-btn lt-btn--secondary lt-btn--sm">Filter aufheben</button>
+        </div>
+
         <div class="lt-search-box" style="margin-bottom: 16px;">
           <input type="text" id="books-search-input" placeholder="Suche nach Titel, Autor, ISBN, Erscheinungsjahr …" />
         </div>
@@ -121,6 +126,8 @@
       </div>
       <form id="book-form" class="lt-form">
         <input type="hidden" id="form-book-id" value="" />
+        <input type="hidden" id="form-series-id" value="" />
+        <input type="hidden" id="form-series-order" value="" />
 
         <div class="lt-form__group">
           <label for="form-isbn">ISBN *</label>
