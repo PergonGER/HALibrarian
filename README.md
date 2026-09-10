@@ -39,10 +39,20 @@ Kommende Ausbaustufen (siehe Projekt-Blueprint):
 
 ## Hinweis zum Kamera-Scanner (ab Session 3)
 
-Der geplante Barcode-Scanner nutzt `getUserMedia` und benötigt daher
-einen "secure context" – also HTTPS (z. B. via Nabu Casa oder eigenes
+Der Barcode-Scanner nutzt `getUserMedia` und benötigt daher einen
+"secure context" – also HTTPS (z. B. via Nabu Casa oder eigenes
 Zertifikat) oder `localhost`. Über reines HTTP im lokalen Netzwerk wird
-der Browser den Kamerazugriff blockieren.
+der Browser den Kamerazugriff blockieren – bestätigt betroffen: iOS/
+Safari (inkl. HA Companion App) bei Zugriff über eine lokale IP ohne
+SSL. Das ist unabhängig von der Panel-Architektur (auch nach der
+`panel_custom`-Migration ab v0.7.0) und kann nicht von der Integration
+aus umgangen werden – nötig ist HTTPS-Zugriff auf Home Assistant selbst,
+am einfachsten über [Nabu Casa](https://www.nabucasa.com/). Ein
+kostenloses Zertifikat direkt für eine private/lokale IP-Adresse (z. B.
+`192.168.x.x`) gibt es nicht – auch Let's Encrypts neue
+IP-Zertifikate (seit 2025) gelten nur für öffentliche IPs. Kostenlose
+Alternative: eigene (Sub-)Domain (z. B. via DuckDNS) + HAs
+Let's-Encrypt-Add-on.
 
 ## Entwicklungsprozess mit Jules
 
