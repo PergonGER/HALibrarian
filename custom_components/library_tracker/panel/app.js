@@ -11,6 +11,42 @@ let currentBooksRaw = []; // status-filtered books as returned by the backend
 let currentBooks = []; // currentBooksRaw further filtered by the search box, i.e. what's actually rendered
 let currentAuthors = [];
 
+// Local (per-device) Settings: panel title override + theme, stored in
+// localStorage - not synced across devices/users, same scope as the
+// access token. Deliberately applied outside of any HA-connection flow
+// so the title/theme are correct even before the user logs in.
+const SETTINGS_STORAGE_KEY = "library_tracker_settings";
+
+function loadSettings() {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function saveSettings(settings) {
+  try {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch (err) {
+    console.warn("[library_tracker] Could not persist settings:", err);
+  }
+}
+
+function applySettings(settings) {
+  const titleEl = document.querySelector(".lt-header__title");
+  if (titleEl) {
+    titleEl.textContent = settings.title && settings.title.trim() ? settings.title.trim() : "Library Tracker";
+  }
+
+  if (settings.theme === "light" || settings.theme === "dark") {
+    document.documentElement.dataset.theme = settings.theme;
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+}
+
 // Toast Notifications
 function showToast(message, isError = false) {
   const container = document.getElementById("toast-container");
@@ -567,6 +603,52 @@ function switchToTab(tabId) {
 
 // DOM Event Listeners Initialization
 document.addEventListener("DOMContentLoaded", () => {
+  // Apply saved title/theme immediately, independent of HA login state.
+  applySettings(loadSettings());
+
+  // Settings Dialog
+  const settingsDialog = document.getElementById("settings-dialog");
+  const btnOpenSettings = document.getElementById("btn-open-settings");
+  if (btnOpenSettings) {
+    btnOpenSettings.addEventListener("click", () => {
+      const settings = loadSettings();
+      document.getElementById("settings-title").value = settings.title || "";
+      document.getElementById("settings-theme").value = settings.theme || "system";
+      settingsDialog.showModal();
+    });
+  }
+
+  const btnCloseSettings = document.getElementById("btn-close-settings");
+  if (btnCloseSettings) {
+    btnCloseSettings.addEventListener("click", () => settingsDialog.close());
+  }
+
+  const settingsForm = document.getElementById("settings-form");
+  if (settingsForm) {
+    settingsForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const settings = {
+        title: document.getElementById("settings-title").value.trim(),
+        theme: document.getElementById("settings-theme").value,
+      };
+      saveSettings(settings);
+      applySettings(settings);
+      settingsDialog.close();
+      showToast("Einstellungen gespeichert.");
+    });
+  }
+
+  const btnSettingsReset = document.getElementById("btn-settings-reset");
+  if (btnSettingsReset) {
+    btnSettingsReset.addEventListener("click", () => {
+      saveSettings({});
+      applySettings({});
+      document.getElementById("settings-title").value = "";
+      document.getElementById("settings-theme").value = "system";
+      showToast("Einstellungen zurückgesetzt.");
+    });
+  }
+
   // Navigation Tabs
   const navBtns = document.querySelectorAll(".lt-nav__btn");
   navBtns.forEach((btn) => {

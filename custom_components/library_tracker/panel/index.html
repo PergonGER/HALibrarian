@@ -18,6 +18,7 @@
       <button class="lt-nav__btn" data-tab="tab-scanner">📷 ISBN-Scanner</button>
     </nav>
     <span class="lt-version-badge" id="version-badge" hidden></span>
+    <button id="btn-open-settings" class="lt-icon-btn" title="Einstellungen" aria-label="Einstellungen">⚙️</button>
   </header>
 
   <main class="lt-main">
@@ -181,6 +182,39 @@
         <button type="button" id="btn-confirm-cancel" class="lt-btn lt-btn--secondary">Abbrechen</button>
         <button type="button" id="btn-confirm-ok" class="lt-btn lt-btn--danger">Löschen</button>
       </div>
+    </div>
+  </dialog>
+
+  <!-- SETTINGS DIALOG (per-device, stored in localStorage - not synced
+       between devices/users, same as the access token) -->
+  <dialog id="settings-dialog" class="lt-dialog">
+    <div class="lt-dialog__content">
+      <div class="lt-dialog__header">
+        <h3>Einstellungen</h3>
+        <button id="btn-close-settings" class="lt-dialog__close">&times;</button>
+      </div>
+      <form id="settings-form" class="lt-form">
+        <div class="lt-form__group">
+          <label for="settings-title">Panel-Titel</label>
+          <input type="text" id="settings-title" placeholder="Library Tracker" maxlength="60" />
+        </div>
+
+        <div class="lt-form__group">
+          <label for="settings-theme">Farbschema</label>
+          <select id="settings-theme">
+            <option value="system">Systemeinstellung folgen</option>
+            <option value="light">Hell</option>
+            <option value="dark">Dunkel</option>
+          </select>
+        </div>
+
+        <p class="lt-status-msg">Diese Einstellungen gelten nur für dieses Gerät/diesen Browser.</p>
+
+        <div class="lt-form__actions">
+          <button type="button" id="btn-settings-reset" class="lt-btn lt-btn--secondary">Zurücksetzen</button>
+          <button type="submit" class="lt-btn lt-btn--primary">Speichern</button>
+        </div>
+      </form>
     </div>
   </dialog>
 
