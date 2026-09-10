@@ -70,3 +70,29 @@ nur eine Merkliste, damit nichts verloren geht.
     potenziell mehrere Folge-Abfragen (KI-Erkennung + je Titel eine
     Google-Books-Suche) — Nutzer sollte das vorher absehen können
     (Rate-Limits/Kosten seines KI-Providers).
+- **Buch hinzufügen: Teilangaben reichen, Rest wird automatisch
+  ergänzt** (Nutzerwunsch 2026-09-10): Statt zwingend ISBN oder
+  vollständigem Titel+Autor genügt eine Teilangabe (z. B. nur der
+  Titel, evtl. mit Tippfehlern), der Rest wird automatisch ausgefüllt.
+  **Zweistufiger Ansatz, nicht direkt auf KI springen:**
+  1. **Primärweg — deterministische Google-Books-Freitextsuche, keine
+     KI:** Derselbe Endpunkt, den `api.py` schon für die ISBN-Suche
+     nutzt (`googleapis.com/books/v1/volumes?q=...`), unterstützt über
+     denselben `q`-Parameter auch Freitext- und feldbeschränkte Suchen
+     (`intitle:`, `inauthor:` statt `isbn:`) und liefert bei Treffern
+     echte, strukturierte Daten (Titel, Autor, ISBN, Cover,
+     Erscheinungsdatum) — ohne Halluzinationsrisiko. Bei mehreren
+     Treffern: Trefferliste zur Auswahl statt automatisch den ersten zu
+     nehmen. Das deckt vermutlich den Großteil der Fälle ab und sollte
+     zuerst gebaut werden, unabhängig von `ai_task`/Gemini.
+  2. **Fallback — Gemini/`ai_task`, nur wenn (1) nichts findet:**
+     gleiches „KI-Vorschlag, ungeprüft"-Prinzip wie bei #12/Regalfoto —
+     Ergebnis vor Übernahme durch den Nutzer bestätigen lassen, nicht
+     blind in die Bibliothek schreiben (Gemini kann ISBN/Erscheinungs-
+     datum erfinden, wo eine echte Datenbank die richtigen liefert).
+     Sinnvollerweise **nach** #12 angehen (gleiche Infrastruktur/UI-
+     Muster wiederverwendbar).
+  Offener Punkt: Wie die UI das im bestehenden „Buch hinzufügen"-Dialog
+  abbildet (z. B. ISBN-Feld optional machen, neues Freitext-Suchfeld
+  statt/neben ISBN, Trefferliste vor dem eigentlichen Formular) ist noch
+  nicht entschieden.
