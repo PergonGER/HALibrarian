@@ -171,6 +171,7 @@ function renderBooks(books) {
         </div>
         <div class="lt-book-card__rating-container"></div>
         <div class="lt-book-card__actions">
+          ${book.status !== "gelesen" ? `<button class="lt-btn lt-btn--secondary lt-btn--sm btn-mark-read">✓ Gelesen</button>` : ""}
           <button class="lt-btn lt-btn--secondary lt-btn--sm btn-edit-book">Bearbeiten</button>
           <button class="lt-btn lt-btn--danger lt-btn--sm btn-delete-book">Löschen</button>
         </div>
@@ -178,6 +179,24 @@ function renderBooks(books) {
     `;
 
     card.querySelector(".lt-book-card__rating-container").appendChild(starsEl);
+
+    // Mark as read (quick status toggle, skips the edit dialog)
+    const markReadBtn = card.querySelector(".btn-mark-read");
+    if (markReadBtn) {
+      markReadBtn.addEventListener("click", async () => {
+        try {
+          await haClient.callWS({
+            type: "library_tracker/books/update",
+            book_id: book.id,
+            status: "gelesen",
+          });
+          showToast(`"${book.title}" als gelesen markiert.`);
+          loadBooks();
+        } catch (err) {
+          showToast("Fehler beim Aktualisieren: " + (err.message || err), true);
+        }
+      });
+    }
 
     // Edit Event
     card.querySelector(".btn-edit-book").addEventListener("click", () => {
