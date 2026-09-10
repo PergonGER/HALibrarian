@@ -169,6 +169,37 @@ class LibraryTrackerPanel extends HTMLElement {
         </div>
       </main>
 
+      <!-- BOOK DETAIL DIALOG -->
+      <div id="book-detail-dialog" class="lt-dialog-overlay" hidden>
+        <div class="lt-dialog__content lt-book-detail">
+          <div class="lt-dialog__header">
+            <h3>Buch-Details</h3>
+            <button id="btn-close-detail-dialog" class="lt-dialog__close">&times;</button>
+          </div>
+          <div class="lt-book-detail__body">
+            <div id="detail-cover-container" class="lt-book-detail__cover-wrapper"></div>
+            <div class="lt-book-detail__info">
+              <h3 id="detail-title" class="lt-book-detail__title"></h3>
+              <p id="detail-author" class="lt-book-detail__author"></p>
+              <div class="lt-book-detail__meta">
+                <span id="detail-status" class="lt-badge"></span>
+                <span id="detail-published-date"></span>
+              </div>
+              <div id="detail-series-container"></div>
+              <div class="lt-book-detail__rating">
+                <span class="lt-book-detail__label">Bewertung:</span>
+                <div id="detail-rating-stars"></div>
+              </div>
+            </div>
+          </div>
+          <div class="lt-book-detail__actions">
+            <button id="btn-detail-mark-read" class="lt-btn lt-btn--secondary">✓ Gelesen</button>
+            <button id="btn-detail-edit" class="lt-btn lt-btn--primary">Bearbeiten</button>
+            <button id="btn-detail-delete" class="lt-btn lt-btn--danger">Löschen</button>
+          </div>
+        </div>
+      </div>
+
       <!-- MODAL / DIALOG: Add & Edit Book
            Plain <div> + [hidden], not <dialog>/showModal(): <dialog> inside
            a shadow root has real, documented cross-browser bugs (Chromium
@@ -488,98 +519,16 @@ class LibraryTrackerPanel extends HTMLElement {
         coverHtml = `<div class="lt-book-card__cover">📖</div>`;
       }
 
-      const starsEl = this._createStarRatingComponent(book.rating, async (newRating) => {
-        const prevRating = book.rating;
-        book.rating = newRating;
-        try {
-          await this._hass.callWS({
-            type: "library_tracker/books/update",
-            book_id: book.id,
-            rating: newRating,
-          });
-          this._showToast("Bewertung aktualisiert.");
-        } catch (err) {
-          book.rating = prevRating;
-          this._renderBooks(this._currentBooks);
-          this._showToast("Fehler beim Aktualisieren der Bewertung: " + (err.message || err), true);
-        }
-      });
-
-      let seriesBadgeHtml = "";
-      if (book.series_id) {
-        const label = book.series_order
-          ? `Teil ${this._escapeHtml(book.series_order)} der Reihe`
-          : "Teil einer Reihe";
-        seriesBadgeHtml = `<div><span class="lt-badge lt-badge--series btn-series-link" title="Alle Bücher dieser Reihe anzeigen">📚 ${label}</span></div>`;
-      }
-
       card.innerHTML = `
         ${coverHtml}
         <div class="lt-book-card__content">
-          <div>
-            <h4 class="lt-book-card__title" title="${this._escapeHtml(book.title)}">${this._escapeHtml(book.title)}</h4>
-            <p class="lt-book-card__author">${this._escapeHtml(book.author)}</p>
-            <p class="lt-book-card__meta">
-              <span class="lt-badge lt-badge--${this._escapeHtml(book.status)}">${this._escapeHtml(book.status)}</span>
-              ${book.published_date ? ` • ${this._escapeHtml(book.published_date)}` : ""}
-            </p>
-            ${seriesBadgeHtml}
-          </div>
-          <div class="lt-book-card__rating-container"></div>
-          <div class="lt-book-card__actions">
-            ${book.status !== "gelesen" ? `<button class="lt-btn lt-btn--secondary lt-btn--sm btn-mark-read">✓ Gelesen</button>` : ""}
-            <button class="lt-btn lt-btn--secondary lt-btn--sm btn-edit-book">Bearbeiten</button>
-            <button class="lt-btn lt-btn--danger lt-btn--sm btn-delete-book">Löschen</button>
-          </div>
+          <h4 class="lt-book-card__title" title="${this._escapeHtml(book.title)}">${this._escapeHtml(book.title)}</h4>
+          <p class="lt-book-card__author">${this._escapeHtml(book.author)}</p>
         </div>
       `;
 
-      const seriesLink = card.querySelector(".btn-series-link");
-      if (seriesLink) {
-        seriesLink.addEventListener("click", () => {
-          this._currentSeriesFilterId = book.series_id;
-          this._loadBooks();
-        });
-      }
-
-      card.querySelector(".lt-book-card__rating-container").appendChild(starsEl);
-
-      const markReadBtn = card.querySelector(".btn-mark-read");
-      if (markReadBtn) {
-        markReadBtn.addEventListener("click", async () => {
-          try {
-            await this._hass.callWS({
-              type: "library_tracker/books/update",
-              book_id: book.id,
-              status: "gelesen",
-            });
-            this._showToast(`"${book.title}" als gelesen markiert.`);
-            this._loadBooks();
-          } catch (err) {
-            this._showToast("Fehler beim Aktualisieren: " + (err.message || err), true);
-          }
-        });
-      }
-
-      card.querySelector(".btn-edit-book").addEventListener("click", () => {
-        this._openBookDialog(book);
-      });
-
-      card.querySelector(".btn-delete-book").addEventListener("click", async () => {
-        const confirmed = await this._showConfirmDialog(`Soll "${book.title}" wirklich gelöscht werden?`);
-        if (confirmed) {
-          try {
-            await this._hass.callWS({
-              type: "library_tracker/books/delete",
-              book_id: book.id,
-            });
-            this._showToast("Buch gelöscht.");
-            this._loadBooks();
-            this._loadAuthors();
-          } catch (err) {
-            this._showToast("Fehler beim Löschen: " + (err.message || err), true);
-          }
-        }
+      card.addEventListener("click", () => {
+        this._openBookDetailDialog(book);
       });
 
       container.appendChild(card);
@@ -687,6 +636,136 @@ class LibraryTrackerPanel extends HTMLElement {
 
       container.appendChild(item);
     });
+  }
+
+  _openBookDetailDialog(book) {
+    const dialog = this.$("#book-detail-dialog");
+    if (!dialog) return;
+
+    const coverContainer = this.$("#detail-cover-container");
+    if (coverContainer) {
+      if (book.cover_url) {
+        coverContainer.innerHTML = `<img src="${this._escapeHtml(book.cover_url)}" class="lt-book-detail__cover-img" alt="Cover" />`;
+      } else {
+        coverContainer.innerHTML = `<div class="lt-book-detail__cover-placeholder">📖</div>`;
+      }
+    }
+
+    const titleEl = this.$("#detail-title");
+    if (titleEl) titleEl.textContent = book.title || "";
+
+    const authorEl = this.$("#detail-author");
+    if (authorEl) authorEl.textContent = book.author || "";
+
+    const statusEl = this.$("#detail-status");
+    if (statusEl) {
+      statusEl.className = `lt-badge lt-badge--${this._escapeHtml(book.status || "")}`;
+      statusEl.textContent = book.status || "";
+    }
+
+    const pubDateEl = this.$("#detail-published-date");
+    if (pubDateEl) {
+      pubDateEl.textContent = book.published_date ? ` • ${book.published_date}` : "";
+    }
+
+    const seriesContainer = this.$("#detail-series-container");
+    if (seriesContainer) {
+      seriesContainer.innerHTML = "";
+      if (book.series_id) {
+        const label = book.series_order
+          ? `Teil ${this._escapeHtml(book.series_order)} der Reihe`
+          : "Teil einer Reihe";
+        const seriesBadge = document.createElement("span");
+        seriesBadge.className = "lt-badge lt-badge--series btn-series-link";
+        seriesBadge.title = "Alle Bücher dieser Reihe anzeigen";
+        seriesBadge.textContent = `📚 ${label}`;
+        seriesBadge.addEventListener("click", () => {
+          this._currentSeriesFilterId = book.series_id;
+          this._closeBookDetailDialog();
+          this._loadBooks();
+        });
+        seriesContainer.appendChild(seriesBadge);
+      }
+    }
+
+    const starsContainer = this.$("#detail-rating-stars");
+    if (starsContainer) {
+      starsContainer.innerHTML = "";
+      const starsEl = this._createStarRatingComponent(book.rating, async (newRating) => {
+        const prevRating = book.rating;
+        book.rating = newRating;
+        try {
+          await this._hass.callWS({
+            type: "library_tracker/books/update",
+            book_id: book.id,
+            rating: newRating,
+          });
+          this._showToast("Bewertung aktualisiert.");
+        } catch (err) {
+          book.rating = prevRating;
+          this._openBookDetailDialog(book);
+          this._showToast("Fehler beim Aktualisieren der Bewertung: " + (err.message || err), true);
+        }
+      });
+      starsContainer.appendChild(starsEl);
+    }
+
+    const btnMarkRead = this.$("#btn-detail-mark-read");
+    if (btnMarkRead) {
+      btnMarkRead.hidden = book.status === "gelesen";
+      btnMarkRead.onclick = async () => {
+        try {
+          await this._hass.callWS({
+            type: "library_tracker/books/update",
+            book_id: book.id,
+            status: "gelesen",
+          });
+          this._showToast(`"${book.title}" als gelesen markiert.`);
+          this._closeBookDetailDialog();
+          this._loadBooks();
+        } catch (err) {
+          this._showToast("Fehler beim Aktualisieren: " + (err.message || err), true);
+        }
+      };
+    }
+
+    const btnEdit = this.$("#btn-detail-edit");
+    if (btnEdit) {
+      btnEdit.onclick = () => {
+        this._closeBookDetailDialog();
+        this._openBookDialog(book);
+      };
+    }
+
+    const btnDelete = this.$("#btn-detail-delete");
+    if (btnDelete) {
+      btnDelete.onclick = async () => {
+        const confirmed = await this._showConfirmDialog(`Soll "${book.title}" wirklich gelöscht werden?`);
+        if (confirmed) {
+          try {
+            await this._hass.callWS({
+              type: "library_tracker/books/delete",
+              book_id: book.id,
+            });
+            this._showToast("Buch gelöscht.");
+            this._closeBookDetailDialog();
+            this._loadBooks();
+            this._loadAuthors();
+          } catch (err) {
+            this._showToast("Fehler beim Löschen: " + (err.message || err), true);
+          }
+        }
+      };
+    }
+
+    dialog.hidden = false;
+  }
+
+  _closeBookDetailDialog() {
+    const dialog = this.$("#book-detail-dialog");
+    if (dialog) {
+      dialog.hidden = true;
+    }
   }
 
   _openBookDialog(book = null) {
@@ -1072,6 +1151,12 @@ class LibraryTrackerPanel extends HTMLElement {
         this._currentSearchQuery = searchInput.value;
         this._applySearchFilterAndRender();
       });
+    }
+
+    // Detail Dialog Trigger & Actions
+    const btnCloseDetail = this.$("#btn-close-detail-dialog");
+    if (btnCloseDetail) {
+      btnCloseDetail.addEventListener("click", () => this._closeBookDetailDialog());
     }
 
     // Dialog Trigger & Actions
