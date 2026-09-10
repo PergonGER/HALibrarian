@@ -61,6 +61,16 @@ Punkt 2 ist hier tatsächlich eingetreten, nicht nur als vorsorgliche Regel:
 
 **Bestätigte Lehre:** Genau wie im Merc-Repo beschrieben, scheint Jules bei mehreren Anstößen kurz hintereinander auf Basis eines **inzwischen veralteten eigenen Zwischenstands** weiterzuarbeiten und beim eigenen Push den zwischenzeitlichen Fremd-Push (hier: von Claude) zu überschreiben — obwohl der eigene Commit den fremden Commit korrekt als Parent führt. Das ist kein Force-Push/History-Rewrite, sondern ein regulärer neuer Commit mit inhaltlich falschem (zurückgesetztem) Tree. **Sobald ein eigener Fix auf einer Jules-Branch von einem direkt danach folgenden Jules-Commit klobbert wird: nicht erneut auf derselben Branch versuchen — sofort auf einen neuen, von Jules nicht mehr angefassten Branch/PR ausweichen (Vorgehen wie oben, Schritt 5), statt in eine Fix-Revert-Schleife zu geraten.**
 
+### ⚠️ Zweiter Vorfall: PR #6 (2026-09-10) — gleiches Muster, andere Ursache
+
+Diesmal **kein** zeitliches Race (Jules hat erst reagiert, nachdem längst nichts mehr aktiv lief), sondern offenbar eine grundsätzlich veraltete lokale Arbeitskopie:
+
+1. `REQUEST_CHANGES`-Review auf PR #6 gepostet (zwei Findings in `app.js`) — **ohne** begleitenden `@jules`-Kommentar → keine Reaktion (siehe neue Regel oben in Abschnitt 4).
+2. Nach zusätzlichem `@jules`-Kommentar mit Zusammenfassung: Jules pusht einen echten Commit (`af06b28`, kein Leer-Commit diesmal). Der Commit hat den korrekten Parent (meinen vorherigen Merge-Fix-Commit `0dd2928`), aber sein Inhalt setzt **ausschließlich** `__init__.py`/`manifest.json` wieder auf den alten, kaputten Stand zurück (`hass.components.frontend`, Version `0.1.0`) — **keiner der beiden angeforderten `app.js`-Fixes wurde umgesetzt**, obwohl der Kommentar sie explizit und einzeln aufgelistet hatte.
+3. Reaktion: Wie beim ersten Vorfall — nicht erneut auf derselben Branch versucht, sondern neuer Branch (`session-3-hardened`) von `0dd2928`, beide Fixes selbst in `app.js` umgesetzt, neuer PR (#7) gegen `main`. PR #6 kommentiert und geschlossen.
+
+**Zusätzliche Lehre:** Dieses Verhalten ist nicht auf das enge Zeitfenster kurz nach einem eigenen Claude-Push beschränkt (Race Condition), sondern kann auch bei einer regulären, zeitlich entkoppelten Reaktion auf ein späteres Review/einen späteren Kommentar auftreten. Jules scheint dann **nur die von Claude zuvor gepushten, dem eigenen letzten bekannten Stand widersprechenden Dateien zu revertieren**, ohne die eigentlich angeforderte inhaltliche Änderung überhaupt anzugehen. Praktische Konsequenz: **Nach jedem Jules-Push auf einen PR, den Claude zuvor selbst gefixt hat, zuerst per Tree-Hash-Vergleich prüfen, ob der eigene Fix noch da ist UND ob die eigentlich angeforderte Änderung überhaupt enthalten ist** — beides einzeln, nicht nur "gab es einen neuen Commit mit anderem Tree-Hash". Ein neuer, "echter" Commit ist kein Beleg dafür, dass er das Richtige tut.
+
 ---
 
 ## 5. Weitere etablierte Regeln
@@ -81,6 +91,8 @@ Punkt 2 ist hier tatsächlich eingetreten, nicht nur als vorsorgliche Regel:
 | PR #3 | Session 2 (Jules-Original) | Geschlossen, nicht gemergt — durch PR #5 ersetzt |
 | PR #5 | Session 2 (gehärtet: Jules-Arbeit + 3 Claude-Fixes) | Gemergt |
 | Issue #4 | Session 3: Frontend, Scanner & Sterne-Bewertung | Label `Jules` gesetzt, sobald PR #5 in main war (kein Überschneidungsrisiko mehr) |
+| PR #6 | Session 3 (Jules-Original) | Geschlossen, nicht gemergt — durch PR #7 ersetzt (2. Revert-Vorfall) |
+| PR #7 | Session 3 (gehärtet: Jules-Arbeit + 2 Claude-Fixes) | Offen, wartet auf Review/Merge |
 
 `main` ist jetzt auf dem vollständigen Session-2-Stand (Panel-Login via Long-Lived Token, DB, WebSocket-Commands, Google-Books/Open-Library-Lookup). Nach Merge stichprobenartig verifiziert, dass keine zuvor gemergten Dateien (Playbook, README-Verweis) verschwunden sind.
 
