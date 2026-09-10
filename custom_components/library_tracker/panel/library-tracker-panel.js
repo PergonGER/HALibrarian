@@ -169,8 +169,15 @@ class LibraryTrackerPanel extends HTMLElement {
         </div>
       </main>
 
-      <!-- MODAL / DIALOG: Add & Edit Book -->
-      <dialog id="book-dialog" class="lt-dialog">
+      <!-- MODAL / DIALOG: Add & Edit Book
+           Plain <div> + [hidden], not <dialog>/showModal(): <dialog> inside
+           a shadow root has real, documented cross-browser bugs (Chromium
+           #3601/#827397) where ::backdrop and top-layer promotion don't
+           render — confirmed on Android WebView (HA Companion App), where
+           the dialog rendered inline with no backdrop instead of as a
+           centered modal. A manually positioned overlay works identically
+           everywhere. -->
+      <div id="book-dialog" class="lt-dialog-overlay" hidden>
         <div class="lt-dialog__content">
           <div class="lt-dialog__header">
             <h3 id="dialog-title">Buch hinzufügen</h3>
@@ -227,10 +234,10 @@ class LibraryTrackerPanel extends HTMLElement {
             </div>
           </form>
         </div>
-      </dialog>
+      </div>
 
       <!-- CONFIRM DIALOG -->
-      <dialog id="confirm-dialog" class="lt-dialog">
+      <div id="confirm-dialog" class="lt-dialog-overlay" hidden>
         <div class="lt-dialog__content">
           <div class="lt-dialog__header">
             <h3 id="confirm-dialog-title">Bestätigen</h3>
@@ -241,10 +248,10 @@ class LibraryTrackerPanel extends HTMLElement {
             <button type="button" id="btn-confirm-ok" class="lt-btn lt-btn--danger">Löschen</button>
           </div>
         </div>
-      </dialog>
+      </div>
 
       <!-- SETTINGS DIALOG -->
-      <dialog id="settings-dialog" class="lt-dialog">
+      <div id="settings-dialog" class="lt-dialog-overlay" hidden>
         <div class="lt-dialog__content">
           <div class="lt-dialog__header">
             <h3>Einstellungen</h3>
@@ -284,7 +291,7 @@ class LibraryTrackerPanel extends HTMLElement {
             </div>
           </form>
         </div>
-      </dialog>
+      </div>
 
       <!-- TOAST NOTIFICATIONS -->
       <div id="toast-container" class="lt-toast-container"></div>
@@ -714,12 +721,12 @@ class LibraryTrackerPanel extends HTMLElement {
       this.$("#form-status").value = "ungelesen";
     }
 
-    dialog.showModal();
+    dialog.hidden = false;
   }
 
   _closeBookDialog() {
     const dialog = this.$("#book-dialog");
-    dialog.close();
+    dialog.hidden = true;
   }
 
   _showConfirmDialog(message) {
@@ -733,7 +740,7 @@ class LibraryTrackerPanel extends HTMLElement {
       const cleanup = (result) => {
         btnOk.removeEventListener("click", onOk);
         btnCancel.removeEventListener("click", onCancel);
-        dialog.close();
+        dialog.hidden = true;
         resolve(result);
       };
       const onOk = () => cleanup(true);
@@ -741,7 +748,7 @@ class LibraryTrackerPanel extends HTMLElement {
 
       btnOk.addEventListener("click", onOk);
       btnCancel.addEventListener("click", onCancel);
-      dialog.showModal();
+      dialog.hidden = false;
     });
   }
 
@@ -890,13 +897,13 @@ class LibraryTrackerPanel extends HTMLElement {
         this.$("#settings-title").value = settings.title || "";
         this.$("#settings-theme").value = settings.theme || "system";
         this.$("#settings-columns").value = settings.columns || "auto";
-        settingsDialog.showModal();
+        settingsDialog.hidden = false;
       });
     }
 
     const btnCloseSettings = this.$("#btn-close-settings");
     if (btnCloseSettings) {
-      btnCloseSettings.addEventListener("click", () => settingsDialog.close());
+      btnCloseSettings.addEventListener("click", () => { settingsDialog.hidden = true; });
     }
 
     const settingsForm = this.$("#settings-form");
@@ -910,7 +917,7 @@ class LibraryTrackerPanel extends HTMLElement {
         };
         this._saveSettings(settings);
         this._applySettings(settings);
-        settingsDialog.close();
+        settingsDialog.hidden = true;
         this._showToast("Einstellungen gespeichert.");
       });
     }

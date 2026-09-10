@@ -551,24 +551,35 @@ select:focus {
   border-color: var(--lt-primary);
 }
 
-.lt-dialog {
-  border: none;
-  border-radius: 8px;
-  padding: 0;
-  background: transparent;
-  max-width: 500px;
-  width: 90%;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+/* Plain <div> overlay instead of <dialog>/::backdrop — <dialog> inside a
+   shadow root has real cross-browser gaps in ::backdrop rendering and
+   top-layer promotion (confirmed on Android WebView: dialog rendered
+   inline with no backdrop). display:flex only via the class, [hidden]
+   forced with !important so it always wins regardless of the class. */
+.lt-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
 }
 
-.lt-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
+.lt-dialog-overlay[hidden] {
+  display: none !important;
 }
 
 .lt-dialog__content {
   background: var(--lt-card-bg);
   padding: 24px;
   border-radius: 8px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
 }
 
 .lt-dialog__header {
