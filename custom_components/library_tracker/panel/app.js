@@ -5,8 +5,10 @@ console.info("[library_tracker] Loading panel application...");
 
 let haClient = null;
 let currentFilter = "all";
+let currentSearchQuery = "";
 let html5QrCode = null;
-let currentBooks = [];
+let currentBooksRaw = []; // status-filtered books as returned by the backend
+let currentBooks = []; // currentBooksRaw further filtered by the search box, i.e. what's actually rendered
 let currentAuthors = [];
 
 // Toast Notifications
@@ -109,12 +111,35 @@ async function loadBooks() {
     if (currentFilter !== "all") {
       msg.status = currentFilter;
     }
-    const books = await haClient.callWS(msg);
-    currentBooks = books;
-    renderBooks(books);
+    currentBooksRaw = await haClient.callWS(msg);
+    applySearchFilterAndRender();
   } catch (err) {
     showToast("Fehler beim Laden der Bücher: " + (err.message || err), true);
   }
+}
+
+// Free-text search across all displayed fields, applied client-side on top
+// of the status filter already applied by the backend query above - avoids
+// a WS round-trip on every keystroke.
+function applySearchFilterAndRender() {
+  const query = currentSearchQuery.trim().toLowerCase();
+  const filtered = !query
+    ? currentBooksRaw
+    : currentBooksRaw.filter((book) => {
+        const haystack = [
+          book.title,
+          book.author,
+          book.isbn,
+          book.published_date,
+          book.status,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      });
+  currentBooks = filtered;
+  renderBooks(filtered);
 }
 
 function renderBooks(books) {
@@ -458,6 +483,15 @@ document.addEventListener("DOMContentLoaded", () => {
       loadBooks();
     });
   });
+
+  // Free-text Search
+  const searchInput = document.getElementById("books-search-input");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      currentSearchQuery = searchInput.value;
+      applySearchFilterAndRender();
+    });
+  }
 
   // Auth Connect
   const btnConnect = document.getElementById("btn-connect");
