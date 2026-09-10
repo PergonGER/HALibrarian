@@ -8,6 +8,7 @@ import re
 from typing import Any
 from urllib.parse import quote
 
+import voluptuous as vol
 from aiohttp import ClientError
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -296,3 +297,59 @@ async def _async_query_open_library(session: Any, isbn: str) -> dict[str, Any] |
         # will catch it either.
         _LOGGER.exception("Unexpected error parsing Open Library response for ISBN %s", isbn)
         return None
+
+
+async def async_ai_lookup_series(
+    hass: HomeAssistant, title: str, author: str
+) -> dict[str, Any]:
+    """Look up book series information using Home Assistant's AI Task platform."""
+    try:
+        from homeassistant.components import ai_task
+    except ImportError as err:
+        _LOGGER.warning(
+            "AI Task component (homeassistant.components.ai_task) is not available: %s",
+            err,
+        )
+        raise RuntimeError(
+            "AI Task platform is not available in this Home Assistant environment."
+        ) from err
+
+    instructions = (
+        f"Identifiziere die Buchreihe für das Buch '{title}' von '{author}'. "
+        "Nenne alle bekannten Bände dieser Reihe mit Titel und Reihenfolge (1, 2, 3...). "
+        "Falls das Buch zu keiner Buchreihe gehört oder du unsicher bist, setze is_series auf false."
+    )
+
+    schema = vol.Schema(
+        {
+            vol.Required("is_series"): bool,
+            vol.Optional("series_name"): vol.Any(str, None),
+            vol.Optional("books", default=[]): [
+                vol.Schema(
+                    {
+                        vol.Required("title"): str,
+                        vol.Optional("order"): vol.Any(int, None),
+                    }
+                )
+            ],
+        }
+    )
+
+    try:
+        result = await ai_task.async_generate_data(
+            hass,
+            task_name="library_tracker_series_lookup",
+            instructions=instructions,
+            structure=schema,
+        )
+        if isinstance(result, dict):
+            return result
+        return {"is_series": False, "series_name": None, "books": []}
+    except Exception as err:
+        _LOGGER.warning(
+            "Error generating AI series data for '%s' by '%s': %s",
+            title,
+            author,
+            err,
+        )
+        raise RuntimeError(f"KI-Serien-Suche fehlgeschlagen: {err}") from err

@@ -228,3 +228,48 @@ async def test_async_search_books_by_text_no_results() -> None:
 
     results = await async_search_books_by_text(mock_session, "Unknown Query")
     assert results == []
+
+
+@pytest.mark.asyncio
+async def test_async_ai_lookup_series_success() -> None:
+    """Test successful AI series lookup."""
+    mock_hass = MagicMock()
+    fake_ai_result = {
+        "is_series": True,
+        "series_name": "Harry Potter",
+        "books": [
+            {"title": "Harry Potter und der Stein der Weisen", "order": 1},
+            {"title": "Harry Potter und die Kammer des Schreckens", "order": 2},
+        ],
+    }
+
+    mock_ai_task = MagicMock()
+    mock_ai_task.async_generate_data = AsyncMock(return_value=fake_ai_result)
+
+    with patch.dict("sys.modules", {"homeassistant.components.ai_task": mock_ai_task}):
+        from custom_components.library_tracker.api import async_ai_lookup_series
+
+        res = await async_ai_lookup_series(
+            mock_hass, "Harry Potter und der Stein der Weisen", "J.K. Rowling"
+        )
+        assert res["is_series"] is True
+        assert res["series_name"] == "Harry Potter"
+        assert len(res["books"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_async_ai_lookup_series_error() -> None:
+    """Test AI series lookup when ai_task fails."""
+    mock_hass = MagicMock()
+
+    mock_ai_task = MagicMock()
+    mock_ai_task.async_generate_data = AsyncMock(
+        side_effect=Exception("Provider unavailable")
+    )
+
+    with patch.dict("sys.modules", {"homeassistant.components.ai_task": mock_ai_task}):
+        from custom_components.library_tracker.api import async_ai_lookup_series
+
+        with pytest.raises(RuntimeError) as exc_info:
+            await async_ai_lookup_series(mock_hass, "Some Title", "Some Author")
+        assert "KI-Serien-Suche fehlgeschlagen" in str(exc_info.value)

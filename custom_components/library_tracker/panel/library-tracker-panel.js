@@ -685,6 +685,67 @@ class LibraryTrackerPanel extends HTMLElement {
           this._loadBooks();
         });
         seriesContainer.appendChild(seriesBadge);
+      } else {
+        const btnAi = document.createElement("button");
+        btnAi.id = "btn-ai-series-lookup";
+        btnAi.className = "lt-btn lt-btn--secondary lt-btn--sm";
+        btnAi.textContent = "✨ KI-Serienvorschlag";
+
+        const aiResultContainer = document.createElement("div");
+        aiResultContainer.id = "detail-ai-series-result";
+
+        btnAi.addEventListener("click", async () => {
+          btnAi.disabled = true;
+          btnAi.textContent = "Analysiere Buchreihe mit KI…";
+          aiResultContainer.className = "lt-ai-series-result";
+          aiResultContainer.innerHTML = `<div class="lt-ai-series-loading">🤖 KI analysiert Serienzugehörigkeit…</div>`;
+
+          try {
+            const res = await this._hass.callWS({
+              type: "library_tracker/books/ai_series_lookup",
+              book_id: book.id,
+            });
+
+            btnAi.textContent = "✨ KI-Serienvorschlag";
+            btnAi.disabled = false;
+
+            let html = `<div class="lt-badge lt-badge--ai">✨ KI-Vorschlag, ungeprüft</div>`;
+
+            if (!res || !res.is_series || !res.books || res.books.length === 0) {
+              html += `<p class="lt-ai-series-info">Keine Serienzugehörigkeit von KI erkannt.</p>`;
+            } else {
+              if (res.series_name) {
+                html += `<div class="lt-ai-series-title">Reihe: ${this._escapeHtml(res.series_name)}</div>`;
+              }
+              html += `<ul class="lt-ai-series-list">`;
+              res.books.forEach((b) => {
+                const bTitle = b.title || "Unbekannter Titel";
+                const bOrder = b.order != null ? `${b.order}. ` : "";
+                const inLib = this._currentBooksRaw.some((cb) => {
+                  const t1 = (cb.title || "").toLowerCase().trim();
+                  const t2 = bTitle.toLowerCase().trim();
+                  return t1 === t2 || (t1.length > 3 && t2.length > 3 && (t1.includes(t2) || t2.includes(t1)));
+                });
+
+                const badgeHtml = inLib
+                  ? `<span class="lt-ai-in-lib-tag">✓ bereits in der Bibliothek</span>`
+                  : "";
+
+                html += `<li><span class="lt-ai-book-item">${this._escapeHtml(bOrder)}${this._escapeHtml(bTitle)}</span> ${badgeHtml}</li>`;
+              });
+              html += `</ul>`;
+            }
+
+            aiResultContainer.innerHTML = html;
+          } catch (err) {
+            btnAi.textContent = "✨ KI-Serienvorschlag";
+            btnAi.disabled = false;
+            aiResultContainer.innerHTML = `<div class="lt-alert lt-alert--error" style="margin-top: 8px; font-size: 12px;">Kein KI-Anbieter konfiguriert oder KI-Anfrage fehlgeschlagen (${this._escapeHtml(err.message || err)}).</div>`;
+          }
+        });
+
+        seriesContainer.appendChild(btnAi);
+        seriesContainer.appendChild(aiResultContainer);
       }
     }
 
