@@ -96,6 +96,7 @@ async function connectWithToken(token) {
     // Initial Data Fetch
     loadBooks();
     loadAuthors();
+    loadVersion();
   } catch (err) {
     haClient = null;
     window.LibraryTrackerHA.clearStoredToken();
@@ -257,6 +258,23 @@ async function loadAuthors() {
     renderAuthors(authors);
   } catch (err) {
     showToast("Fehler beim Laden der Autoren: " + (err.message || err), true);
+  }
+}
+
+// Shows the installed integration version (read from manifest.json on the
+// backend) in the header, so it's obvious at a glance which version is
+// running - useful since HACS updates aren't always picked up instantly.
+async function loadVersion() {
+  if (!haClient) return;
+  const badge = document.getElementById("version-badge");
+  if (!badge) return;
+  try {
+    const result = await haClient.callWS({ type: "library_tracker/version" });
+    badge.textContent = `v${result.version}`;
+    badge.hidden = false;
+  } catch (err) {
+    // Non-critical - just don't show the badge.
+    console.warn("[library_tracker] Could not load version:", err);
   }
 }
 
