@@ -375,6 +375,17 @@ body {
   border: 1px solid var(--lt-primary);
 }
 
+/* display:flex only via class, never inline — an inline style on an
+   element that also carries [hidden] would always win over the
+   browser's default "[hidden] { display: none }" rule and keep it
+   visible regardless of the `hidden` property set from app.js. */
+.lt-series-filter-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
 .lt-book-card__actions {
   display: flex;
   gap: 6px;
