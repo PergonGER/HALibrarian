@@ -5,8 +5,10 @@ console.info("[library_tracker] Loading panel application...");
 
 let haClient = null;
 let currentFilter = "all";
+let currentSearchQuery = "";
 let html5QrCode = null;
-let currentBooks = [];
+let currentBooksRaw = []; // status-filtered books as returned by the backend
+let currentBooks = []; // currentBooksRaw further filtered by the search box, i.e. what's actually rendered
 let currentAuthors = [];
 
 // Toast Notifications
@@ -94,6 +96,7 @@ async function connectWithToken(token) {
     // Initial Data Fetch
     loadBooks();
     loadAuthors();
+    loadVersion();
   } catch (err) {
     haClient = null;
     window.LibraryTrackerHA.clearStoredToken();
@@ -109,12 +112,35 @@ async function loadBooks() {
     if (currentFilter !== "all") {
       msg.status = currentFilter;
     }
-    const books = await haClient.callWS(msg);
-    currentBooks = books;
-    renderBooks(books);
+    currentBooksRaw = await haClient.callWS(msg);
+    applySearchFilterAndRender();
   } catch (err) {
     showToast("Fehler beim Laden der Bücher: " + (err.message || err), true);
   }
+}
+
+// Free-text search across all displayed fields, applied client-side on top
+// of the status filter already applied by the backend query above - avoids
+// a WS round-trip on every keystroke.
+function applySearchFilterAndRender() {
+  const query = currentSearchQuery.trim().toLowerCase();
+  const filtered = !query
+    ? currentBooksRaw
+    : currentBooksRaw.filter((book) => {
+        const haystack = [
+          book.title,
+          book.author,
+          book.isbn,
+          book.published_date,
+          book.status,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      });
+  currentBooks = filtered;
+  renderBooks(filtered);
 }
 
 function renderBooks(books) {
@@ -205,7 +231,8 @@ function renderBooks(books) {
 
     // Delete Event
     card.querySelector(".btn-delete-book").addEventListener("click", async () => {
-      if (confirm(`Soll "${book.title}" wirklich gelöscht werden?`)) {
+      const confirmed = await showConfirmDialog(`Soll "${book.title}" wirklich gelöscht werden?`);
+      if (confirmed) {
         try {
           await haClient.callWS({
             type: "library_tracker/books/delete",
@@ -232,6 +259,23 @@ async function loadAuthors() {
     renderAuthors(authors);
   } catch (err) {
     showToast("Fehler beim Laden der Autoren: " + (err.message || err), true);
+  }
+}
+
+// Shows the installed integration version (read from manifest.json on the
+// backend) in the header, so it's obvious at a glance which version is
+// running - useful since HACS updates aren't always picked up instantly.
+async function loadVersion() {
+  if (!haClient) return;
+  const badge = document.getElementById("version-badge");
+  if (!badge) return;
+  try {
+    const result = await haClient.callWS({ type: "library_tracker/version" });
+    badge.textContent = `v${result.version}`;
+    badge.hidden = false;
+  } catch (err) {
+    // Non-critical - just don't show the badge.
+    console.warn("[library_tracker] Could not load version:", err);
   }
 }
 
@@ -267,7 +311,7 @@ function renderAuthors(authors) {
     });
 
     item.innerHTML = `
-      <span class="lt-author-item__name">${escapeHtml(author.name)}</span>
+      <span class="lt-author-item__name lt-author-item__name--clickable" title="Bücher von ${escapeHtml(author.name)} anzeigen">${escapeHtml(author.name)}</span>
       <div class="lt-author-item__actions">
         <div class="lt-author-item__rating"></div>
         <button class="lt-fav-btn" title="Lieblingsautor umschalten">
@@ -277,6 +321,26 @@ function renderAuthors(authors) {
     `;
 
     item.querySelector(".lt-author-item__rating").appendChild(starsEl);
+
+    // Clicking the name jumps to the Bücher tab, filtered to this author
+    // (reuses the existing free-text search, reset to "Alle" status so
+    // every book of theirs shows regardless of read status).
+    item.querySelector(".lt-author-item__name").addEventListener("click", () => {
+      switchToTab("tab-books");
+
+      document.querySelectorAll(".lt-chip").forEach((chip) => {
+        chip.classList.toggle("lt-chip--active", chip.dataset.filter === "all");
+      });
+      currentFilter = "all";
+
+      const searchInput = document.getElementById("books-search-input");
+      if (searchInput) {
+        searchInput.value = author.name;
+      }
+      currentSearchQuery = author.name;
+
+      loadBooks();
+    });
 
     item.querySelector(".lt-fav-btn").addEventListener("click", async () => {
       const newFav = !author.is_favorite;
@@ -348,6 +412,34 @@ function closeBookDialog() {
   dialog.close();
 }
 
+// In-app replacement for window.confirm(): the HA Companion App's WebView
+// does not implement JS dialogs (confirm/alert/prompt) unless the host app
+// explicitly adds a handler for them, which it doesn't here - confirm()
+// silently does nothing there. This uses the same <dialog> element pattern
+// as the book-edit dialog instead, which works everywhere.
+function showConfirmDialog(message) {
+  return new Promise((resolve) => {
+    const dialog = document.getElementById("confirm-dialog");
+    document.getElementById("confirm-dialog-message").textContent = message;
+
+    const btnOk = document.getElementById("btn-confirm-ok");
+    const btnCancel = document.getElementById("btn-confirm-cancel");
+
+    const cleanup = (result) => {
+      btnOk.removeEventListener("click", onOk);
+      btnCancel.removeEventListener("click", onCancel);
+      dialog.close();
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+
+    btnOk.addEventListener("click", onOk);
+    btnCancel.addEventListener("click", onCancel);
+    dialog.showModal();
+  });
+}
+
 // ISBN Lookup & Autofill
 async function handleIsbnLookup(isbn) {
   if (!isbn) {
@@ -400,10 +492,13 @@ function startScanner() {
       { facingMode: "environment" },
       config,
       (decodedText) => {
-        // Successful scan
+        // Successful scan. html5-qrcode throws if stop() is called
+        // synchronously from inside this callback (it's still mid-frame) -
+        // that exception aborted the callback before handleIsbnLookup ever
+        // ran. Do the lookup first, defer stopping the scanner.
         showToast(`Barcode erkannt: ${decodedText}`);
-        stopScanner();
         handleIsbnLookup(decodedText.trim());
+        setTimeout(() => stopScanner(), 0);
       },
       (errorMessage) => {
         // parse errors occur constantly per frame, ignore
@@ -429,13 +524,19 @@ function startScanner() {
 
 function stopScanner() {
   if (html5QrCode && html5QrCode.isScanning) {
-    html5QrCode
-      .stop()
-      .then(() => {
-        document.getElementById("btn-start-scanner").disabled = false;
-        document.getElementById("btn-stop-scanner").disabled = true;
-      })
-      .catch((err) => console.error("Error stopping scanner", err));
+    try {
+      html5QrCode
+        .stop()
+        .then(() => {
+          document.getElementById("btn-start-scanner").disabled = false;
+          document.getElementById("btn-stop-scanner").disabled = true;
+        })
+        .catch((err) => console.error("Error stopping scanner", err));
+    } catch (err) {
+      // html5-qrcode can throw synchronously (not just reject) if called
+      // while the scanner is mid-transition - see mebjas/html5-qrcode#715.
+      console.error("Error stopping scanner (sync)", err);
+    }
   }
 }
 
@@ -450,24 +551,27 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+// Switches the visible tab (also usable from outside the nav click
+// handlers, e.g. clicking an author name to jump to their books).
+function switchToTab(tabId) {
+  document.querySelectorAll(".lt-nav__btn").forEach((b) => {
+    b.classList.toggle("lt-nav__btn--active", b.dataset.tab === tabId);
+  });
+  document.querySelectorAll(".lt-tab-content").forEach((tab) => {
+    tab.hidden = tab.id !== tabId;
+  });
+  if (tabId !== "tab-scanner") {
+    stopScanner();
+  }
+}
+
 // DOM Event Listeners Initialization
 document.addEventListener("DOMContentLoaded", () => {
   // Navigation Tabs
   const navBtns = document.querySelectorAll(".lt-nav__btn");
   navBtns.forEach((btn) => {
     btn.addEventListener("click", () => {
-      navBtns.forEach((b) => b.classList.remove("lt-nav__btn--active"));
-      btn.classList.add("lt-nav__btn--active");
-
-      const tabId = btn.dataset.tab;
-      document.querySelectorAll(".lt-tab-content").forEach((tab) => {
-        tab.hidden = tab.id !== tabId;
-      });
-
-      // Stop scanner if switching away from scanner tab
-      if (tabId !== "tab-scanner") {
-        stopScanner();
-      }
+      switchToTab(btn.dataset.tab);
     });
   });
 
@@ -481,6 +585,15 @@ document.addEventListener("DOMContentLoaded", () => {
       loadBooks();
     });
   });
+
+  // Free-text Search
+  const searchInput = document.getElementById("books-search-input");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      currentSearchQuery = searchInput.value;
+      applySearchFilterAndRender();
+    });
+  }
 
   // Auth Connect
   const btnConnect = document.getElementById("btn-connect");

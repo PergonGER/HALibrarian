@@ -17,6 +17,7 @@
       <button class="lt-nav__btn" data-tab="tab-authors">✍️ Autoren</button>
       <button class="lt-nav__btn" data-tab="tab-scanner">📷 ISBN-Scanner</button>
     </nav>
+    <span class="lt-version-badge" id="version-badge" hidden></span>
   </header>
 
   <main class="lt-main">
@@ -25,9 +26,16 @@
       <h2>Mit Home Assistant verbinden</h2>
       <p>
         Dieses Panel läuft in einem iframe und verbindet sich direkt über die WebSocket-API von Home Assistant.
-        Dafür wird einmalig ein
-        <a href="/profile/security" target="_top">Long-Lived Access Token</a>
-        benötigt (Profil → Sicherheit → Long-Lived Access Tokens erstellen).
+        Dafür wird einmalig ein <strong>Long-Lived Access Token</strong> benötigt — pro Gerät/Browser einmalig einzurichten (der Token wird nur lokal in diesem Browser gespeichert, nicht auf dem HA-Server).
+      </p>
+      <ol class="lt-auth-steps">
+        <li><a href="/profile/security" target="_top">Profil → Sicherheit öffnen</a></li>
+        <li>Ganz unten unter "Long-Lived Access Tokens" auf <strong>"Token erstellen"</strong> klicken, einen Namen vergeben (z. B. "Library Tracker")</li>
+        <li>Den angezeigten Token-Wert <strong>sofort kopieren</strong> — er wird danach nie wieder angezeigt</li>
+        <li>Zurück zu diesem Panel wechseln, Token unten einfügen und auf "Verbinden" klicken</li>
+      </ol>
+      <p class="lt-status-msg" style="margin-top: -8px;">
+        Wert verloren oder auf einem neuen Gerät? Einfach einen weiteren Token erstellen (Schritt 2) — pro Gerät ein eigener Token ist normal und sogar empfehlenswert, dann lässt sich jedes Gerät einzeln widerrufen.
       </p>
       <div class="lt-auth-form">
         <input
@@ -53,6 +61,10 @@
             <button class="lt-chip" data-filter="wunschliste">Wunschliste</button>
           </div>
           <button id="btn-open-add-dialog" class="lt-btn lt-btn--primary">+ Buch hinzufügen</button>
+        </div>
+
+        <div class="lt-search-box" style="margin-bottom: 16px;">
+          <input type="text" id="books-search-input" placeholder="Suche nach Titel, Autor, ISBN, Erscheinungsjahr …" />
         </div>
 
         <div id="books-list" class="lt-books-grid">
@@ -154,6 +166,21 @@
           <button type="submit" id="btn-save-book" class="lt-btn lt-btn--primary">Speichern</button>
         </div>
       </form>
+    </div>
+  </dialog>
+
+  <!-- CONFIRM DIALOG (replaces window.confirm, which the HA Companion App's
+       WebView does not support) -->
+  <dialog id="confirm-dialog" class="lt-dialog">
+    <div class="lt-dialog__content">
+      <div class="lt-dialog__header">
+        <h3 id="confirm-dialog-title">Bestätigen</h3>
+      </div>
+      <p id="confirm-dialog-message"></p>
+      <div class="lt-form__actions">
+        <button type="button" id="btn-confirm-cancel" class="lt-btn lt-btn--secondary">Abbrechen</button>
+        <button type="button" id="btn-confirm-ok" class="lt-btn lt-btn--danger">Löschen</button>
+      </div>
     </div>
   </dialog>
 

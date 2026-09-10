@@ -10,6 +10,7 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
+from homeassistant.loader import async_get_integration
 
 from .api import async_lookup_isbn
 from .const import CONF_GOOGLE_BOOKS_API_KEY, DOMAIN
@@ -305,6 +306,28 @@ async def ws_lookup_isbn(
         connection.send_error(msg["id"], "api_error", str(err))
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "library_tracker/version",
+    }
+)
+@websocket_api.async_response
+async def ws_version(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Report the installed integration version, read from manifest.json.
+
+    Lets the panel show a version number without hardcoding it separately
+    from manifest.json (single source of truth).
+    """
+    try:
+        integration = await async_get_integration(hass, DOMAIN)
+        connection.send_result(msg["id"], {"version": str(integration.version)})
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/version: %s", err)
+        connection.send_error(msg["id"], "version_error", str(err))
+
+
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
     """Register custom WebSocket commands for Library Tracker."""
     if hass.data.get(DOMAIN, {}).get("ws_commands_registered"):
@@ -318,5 +341,6 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_authors_set_favorite)
     websocket_api.async_register_command(hass, ws_authors_set_rating)
     websocket_api.async_register_command(hass, ws_lookup_isbn)
+    websocket_api.async_register_command(hass, ws_version)
 
     hass.data.setdefault(DOMAIN, {})["ws_commands_registered"] = True
