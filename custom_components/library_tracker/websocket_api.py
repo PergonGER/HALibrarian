@@ -243,6 +243,45 @@ async def ws_authors_set_favorite(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "library_tracker/authors/set_rating",
+        vol.Optional("author_id"): vol.Coerce(int),
+        vol.Optional("id"): vol.Coerce(int),
+        vol.Required("rating"): vol.Maybe(
+            vol.All(vol.Coerce(int), vol.Range(min=1, max=5))
+        ),
+    }
+)
+@websocket_api.async_response
+async def ws_authors_set_rating(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Set or clear rating of an author."""
+    try:
+        db = _get_db(hass)
+        author_id = msg.get("author_id") or msg.get("id")
+        if author_id is None:
+            connection.send_error(
+                msg["id"], "invalid_format", "author_id or id is required"
+            )
+            return
+
+        updated = await hass.async_add_executor_job(
+            db.set_author_rating, author_id, msg["rating"]
+        )
+        if updated is None:
+            connection.send_error(
+                msg["id"], "not_found", f"Author with id {author_id} not found"
+            )
+            return
+
+        connection.send_result(msg["id"], updated)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/authors/set_rating: %s", err)
+        connection.send_error(msg["id"], "db_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "library_tracker/lookup_isbn",
         vol.Required("isbn"): vol.All(cv.string, vol.Strip),
     }
@@ -300,6 +339,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_books_delete)
     websocket_api.async_register_command(hass, ws_authors_list)
     websocket_api.async_register_command(hass, ws_authors_set_favorite)
+    websocket_api.async_register_command(hass, ws_authors_set_rating)
     websocket_api.async_register_command(hass, ws_lookup_isbn)
     websocket_api.async_register_command(hass, ws_version)
 

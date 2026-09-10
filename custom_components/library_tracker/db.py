@@ -33,10 +33,17 @@ class LibraryTrackerDatabase:
                 CREATE TABLE IF NOT EXISTS Authors (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL UNIQUE,
-                    is_favorite INTEGER NOT NULL DEFAULT 0
+                    is_favorite INTEGER NOT NULL DEFAULT 0,
+                    rating INTEGER
                 );
                 """
             )
+
+            # Migration: Ensure rating column exists on Authors table
+            cursor.execute("PRAGMA table_info(Authors);")
+            columns = {row["name"] for row in cursor.fetchall()}
+            if "rating" not in columns:
+                cursor.execute("ALTER TABLE Authors ADD COLUMN rating INTEGER;")
 
             cursor.execute(
                 """
@@ -248,7 +255,8 @@ class LibraryTrackerDatabase:
                 SELECT
                     id,
                     name,
-                    is_favorite
+                    is_favorite,
+                    rating
                 FROM Authors
                 ORDER BY name ASC
                 """
@@ -259,6 +267,7 @@ class LibraryTrackerDatabase:
                     "id": row["id"],
                     "name": row["name"],
                     "is_favorite": bool(row["is_favorite"]),
+                    "rating": row["rating"],
                 }
                 for row in rows
             ]
@@ -277,7 +286,7 @@ class LibraryTrackerDatabase:
             if cursor.rowcount == 0:
                 return None
             cursor.execute(
-                "SELECT id, name, is_favorite FROM Authors WHERE id = ?", (author_id,)
+                "SELECT id, name, is_favorite, rating FROM Authors WHERE id = ?", (author_id,)
             )
             row = cursor.fetchone()
             return (
@@ -285,6 +294,37 @@ class LibraryTrackerDatabase:
                     "id": row["id"],
                     "name": row["name"],
                     "is_favorite": bool(row["is_favorite"]),
+                    "rating": row["rating"],
+                }
+                if row
+                else None
+            )
+
+    def set_author_rating(
+        self, author_id: int, rating: int | None
+    ) -> dict[str, Any] | None:
+        """Set or clear author rating (1-5 or None)."""
+        if rating is not None and (not isinstance(rating, int) or not (1 <= rating <= 5)):
+            raise ValueError("Rating must be between 1 and 5, or None.")
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE Authors SET rating = ? WHERE id = ?", (rating, author_id)
+            )
+            conn.commit()
+            if cursor.rowcount == 0:
+                return None
+            cursor.execute(
+                "SELECT id, name, is_favorite, rating FROM Authors WHERE id = ?", (author_id,)
+            )
+            row = cursor.fetchone()
+            return (
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "is_favorite": bool(row["is_favorite"]),
+                    "rating": row["rating"],
                 }
                 if row
                 else None

@@ -368,6 +368,12 @@ body {
   font-weight: 500;
 }
 
+.lt-author-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .lt-author-item__name--clickable {
   cursor: pointer;
 }

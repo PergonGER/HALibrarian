@@ -292,12 +292,35 @@ function renderAuthors(authors) {
   authors.forEach((author) => {
     const item = document.createElement("div");
     item.className = "lt-author-item";
+
+    const starsEl = createStarRatingComponent(author.rating, async (newRating) => {
+      const prevRating = author.rating;
+      author.rating = newRating;
+      try {
+        await haClient.callWS({
+          type: "library_tracker/authors/set_rating",
+          author_id: author.id,
+          rating: newRating,
+        });
+        showToast("Autoren-Bewertung aktualisiert.");
+      } catch (err) {
+        author.rating = prevRating;
+        renderAuthors(currentAuthors); // rollback
+        showToast("Fehler beim Aktualisieren der Autoren-Bewertung: " + (err.message || err), true);
+      }
+    });
+
     item.innerHTML = `
       <span class="lt-author-item__name lt-author-item__name--clickable" title="Bücher von ${escapeHtml(author.name)} anzeigen">${escapeHtml(author.name)}</span>
-      <button class="lt-fav-btn" title="Lieblingsautor umschalten">
-        ${author.is_favorite ? "⭐" : "☆"}
-      </button>
+      <div class="lt-author-item__actions">
+        <div class="lt-author-item__rating"></div>
+        <button class="lt-fav-btn" title="Lieblingsautor umschalten">
+          ${author.is_favorite ? "⭐" : "☆"}
+        </button>
+      </div>
     `;
+
+    item.querySelector(".lt-author-item__rating").appendChild(starsEl);
 
     // Clicking the name jumps to the Bücher tab, filtered to this author
     // (reuses the existing free-text search, reset to "Alle" status so
