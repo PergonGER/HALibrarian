@@ -56,10 +56,20 @@ class LibraryTrackerDatabase:
                     cover_url TEXT,
                     status TEXT NOT NULL,
                     rating INTEGER,
+                    series_id TEXT,
+                    series_order INTEGER,
                     FOREIGN KEY (author_id) REFERENCES Authors(id) ON DELETE CASCADE
                 );
                 """
             )
+
+            # Migration: Ensure series_id and series_order columns exist on Books table
+            cursor.execute("PRAGMA table_info(Books);")
+            books_columns = {row["name"] for row in cursor.fetchall()}
+            if "series_id" not in books_columns:
+                cursor.execute("ALTER TABLE Books ADD COLUMN series_id TEXT;")
+            if "series_order" not in books_columns:
+                cursor.execute("ALTER TABLE Books ADD COLUMN series_order INTEGER;")
 
             cursor.execute(
                 """
@@ -113,7 +123,9 @@ class LibraryTrackerDatabase:
                     b.published_date,
                     b.cover_url,
                     b.status,
-                    b.rating
+                    b.rating,
+                    b.series_id,
+                    b.series_order
                 FROM Books b
                 JOIN Authors a ON b.author_id = a.id
             """
@@ -142,7 +154,9 @@ class LibraryTrackerDatabase:
                     b.published_date,
                     b.cover_url,
                     b.status,
-                    b.rating
+                    b.rating,
+                    b.series_id,
+                    b.series_order
                 FROM Books b
                 JOIN Authors a ON b.author_id = a.id
                 WHERE b.id = ?
@@ -161,6 +175,8 @@ class LibraryTrackerDatabase:
         published_date: str | None = None,
         cover_url: str | None = None,
         rating: int | None = None,
+        series_id: str | None = None,
+        series_order: int | None = None,
     ) -> dict[str, Any]:
         """Add a new book to the database."""
         with self._get_connection() as conn:
@@ -168,10 +184,20 @@ class LibraryTrackerDatabase:
             cursor = conn.cursor()
             cursor.execute(
                 """
-                INSERT INTO Books (isbn, title, author_id, published_date, cover_url, status, rating)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO Books (isbn, title, author_id, published_date, cover_url, status, rating, series_id, series_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (isbn, title, author_id, published_date, cover_url, status, rating),
+                (
+                    isbn,
+                    title,
+                    author_id,
+                    published_date,
+                    cover_url,
+                    status,
+                    rating,
+                    series_id,
+                    series_order,
+                ),
             )
             book_id = cursor.lastrowid
             conn.commit()
@@ -237,6 +263,44 @@ class LibraryTrackerDatabase:
                 conn.commit()
 
         return self.get_book(book_id)
+
+    def get_books_by_series(
+        self, series_id: str, exclude_book_id: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Retrieve all books in the library with the given series_id.
+
+        Ordered by series_order (NULLs last), then by id ASC.
+        Optionally excludes a specific book_id.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT
+                    b.id,
+                    b.isbn,
+                    b.title,
+                    b.author_id,
+                    a.name AS author,
+                    b.published_date,
+                    b.cover_url,
+                    b.status,
+                    b.rating,
+                    b.series_id,
+                    b.series_order
+                FROM Books b
+                JOIN Authors a ON b.author_id = a.id
+                WHERE b.series_id = ?
+            """
+            params: list[Any] = [series_id]
+
+            if exclude_book_id is not None:
+                query += " AND b.id != ?"
+                params.append(exclude_book_id)
+
+            query += " ORDER BY CASE WHEN b.series_order IS NULL THEN 1 ELSE 0 END, b.series_order ASC, b.id ASC"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
 
     def delete_book(self, book_id: int) -> bool:
         """Delete a book by id. Returns True if deleted, False if not found."""

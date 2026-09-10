@@ -6,8 +6,9 @@ console.info("[library_tracker] Loading panel application...");
 let haClient = null;
 let currentFilter = "all";
 let currentSearchQuery = "";
+let currentSeriesFilterId = null;
 let html5QrCode = null;
-let currentBooksRaw = []; // status-filtered books as returned by the backend
+let currentBooksRaw = []; // status-filtered or series-filtered books as returned by the backend
 let currentBooks = []; // currentBooksRaw further filtered by the search box, i.e. what's actually rendered
 let currentAuthors = [];
 
@@ -154,11 +155,22 @@ async function connectWithToken(token) {
 async function loadBooks() {
   if (!haClient) return;
   try {
-    const msg = { type: "library_tracker/books/list" };
-    if (currentFilter !== "all") {
-      msg.status = currentFilter;
+    const banner = document.getElementById("series-filter-banner");
+    if (currentSeriesFilterId) {
+      if (banner) banner.hidden = false;
+      const msg = {
+        type: "library_tracker/books/list_by_series",
+        series_id: currentSeriesFilterId,
+      };
+      currentBooksRaw = await haClient.callWS(msg);
+    } else {
+      if (banner) banner.hidden = true;
+      const msg = { type: "library_tracker/books/list" };
+      if (currentFilter !== "all") {
+        msg.status = currentFilter;
+      }
+      currentBooksRaw = await haClient.callWS(msg);
     }
-    currentBooksRaw = await haClient.callWS(msg);
     applySearchFilterAndRender();
   } catch (err) {
     showToast("Fehler beim Laden der Bücher: " + (err.message || err), true);
@@ -230,6 +242,14 @@ function renderBooks(books) {
       }
     });
 
+    let seriesBadgeHtml = "";
+    if (book.series_id) {
+      const label = book.series_order
+        ? `Teil ${escapeHtml(book.series_order)} der Reihe`
+        : "Teil einer Reihe";
+      seriesBadgeHtml = `<div><span class="lt-badge lt-badge--series btn-series-link" title="Alle Bücher dieser Reihe anzeigen">📚 ${label}</span></div>`;
+    }
+
     card.innerHTML = `
       ${coverHtml}
       <div class="lt-book-card__content">
@@ -240,15 +260,32 @@ function renderBooks(books) {
             <span class="lt-badge lt-badge--${escapeHtml(book.status)}">${escapeHtml(book.status)}</span>
             ${book.published_date ? ` • ${escapeHtml(book.published_date)}` : ""}
           </p>
+          ${seriesBadgeHtml}
         </div>
         <div class="lt-book-card__rating-container"></div>
         <div class="lt-book-card__actions">
           ${book.status !== "gelesen" ? `<button class="lt-btn lt-btn--secondary lt-btn--sm btn-mark-read">✓ Gelesen</button>` : ""}
+          ${!book.series_id ? `<button class="lt-btn lt-btn--secondary lt-btn--sm btn-ai-series" title="KI-Serienvorschlag anfordern">🤖 KI-Serienvorschlag</button>` : ""}
           <button class="lt-btn lt-btn--secondary lt-btn--sm btn-edit-book">Bearbeiten</button>
           <button class="lt-btn lt-btn--danger lt-btn--sm btn-delete-book">Löschen</button>
         </div>
       </div>
     `;
+
+    const seriesLink = card.querySelector(".btn-series-link");
+    if (seriesLink) {
+      seriesLink.addEventListener("click", () => {
+        currentSeriesFilterId = book.series_id;
+        loadBooks();
+      });
+    }
+
+    const aiSeriesBtn = card.querySelector(".btn-ai-series");
+    if (aiSeriesBtn) {
+      aiSeriesBtn.addEventListener("click", () => {
+        openAiSeriesDialog(book);
+      });
+    }
 
     card.querySelector(".lt-book-card__rating-container").appendChild(starsEl);
 
@@ -433,6 +470,8 @@ function openBookDialog(book = null) {
   if (book) {
     titleEl.textContent = "Buch bearbeiten";
     document.getElementById("form-book-id").value = book.id;
+    document.getElementById("form-series-id").value = book.series_id || "";
+    document.getElementById("form-series-order").value = book.series_order != null ? book.series_order : "";
     isbnInput.value = book.isbn || "";
     // ISBN is immutable once a book exists - library_tracker/books/update
     // doesn't accept an isbn field, so editing it here would silently be
@@ -446,6 +485,8 @@ function openBookDialog(book = null) {
   } else {
     titleEl.textContent = "Buch hinzufügen";
     document.getElementById("form-book-id").value = "";
+    document.getElementById("form-series-id").value = "";
+    document.getElementById("form-series-order").value = "";
     isbnInput.readOnly = false;
     document.getElementById("form-status").value = "ungelesen";
   }
@@ -506,6 +547,8 @@ async function handleIsbnLookup(isbn) {
     document.getElementById("form-author").value = meta.author || "";
     document.getElementById("form-published-date").value = meta.published_date || "";
     document.getElementById("form-cover-url").value = meta.cover_url || "";
+    document.getElementById("form-series-id").value = meta.series_id || "";
+    document.getElementById("form-series-order").value = meta.series_order != null ? meta.series_order : "";
     showToast("Buchmetadaten gefunden!");
   } catch (err) {
     showToast("Keine Buchmetadaten gefunden: " + (err.message || err), true);
@@ -586,6 +629,116 @@ function stopScanner() {
   }
 }
 
+// Helper to check if a suggested title is in the library
+function isTitleInLibrary(suggestedTitle) {
+  const books = currentBooksRaw || [];
+  if (!suggestedTitle || !books.length) return false;
+  const clean = (str) =>
+    str
+      .toLowerCase()
+      .replace(/[^\w\säöüß]/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  const target = clean(suggestedTitle);
+  if (!target) return false;
+  return books.some((b) => {
+    const t = clean(b.title);
+    return t === target || (t.length > 3 && target.includes(t)) || (target.length > 3 && t.includes(target));
+  });
+}
+
+// AI Series Lookup Dialog
+async function openAiSeriesDialog(book) {
+  const dialog = document.getElementById("ai-series-dialog");
+  const body = document.getElementById("ai-series-dialog-body");
+
+  body.innerHTML = `
+    <div style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+      <span class="lt-badge lt-badge--warning">⚠️ KI-Vorschlag, ungeprüft</span>
+    </div>
+    <p>Erfrage KI-Serien-Informationen für <strong>${escapeHtml(book.title)}</strong> …</p>
+    <div style="text-align: center; padding: 24px 0; color: var(--lt-text-secondary);">
+      🤖 KI analysiert Buchreihe … bitte einen Moment Geduld.
+    </div>
+  `;
+
+  dialog.showModal();
+
+  try {
+    const result = await haClient.callWS({
+      type: "library_tracker/books/ai_series_lookup",
+      book_id: book.id,
+    });
+
+    if (!result || !result.is_series) {
+      body.innerHTML = `
+        <div style="margin-bottom: 12px;">
+          <span class="lt-badge lt-badge--warning">⚠️ KI-Vorschlag, ungeprüft</span>
+        </div>
+        <div class="lt-alert lt-alert--info">
+          Die KI konnte keine Buchreihe für <strong>"${escapeHtml(book.title)}"</strong> identifizieren oder das Buch gehört zu keiner bekannten Reihe.
+        </div>
+      `;
+      return;
+    }
+
+    const seriesName = result.series_name ? escapeHtml(result.series_name) : "Unbenannte Buchreihe";
+    const books = result.books || [];
+
+    let booksHtml = "";
+    if (books.length === 0) {
+      booksHtml = `<p style="color: var(--lt-text-secondary);">Keine weiteren Bände von der KI genannt.</p>`;
+    } else {
+      booksHtml = books
+        .map((item) => {
+          const title = escapeHtml(item.title);
+          const orderStr = item.order != null ? `Band ${escapeHtml(item.order)}: ` : "";
+          const owned = isTitleInLibrary(item.title);
+          const badge = owned
+            ? `<span class="lt-badge lt-badge--gelesen">In deiner Bibliothek</span>`
+            : `<span class="lt-badge lt-badge--wunschliste">Fehlt in Bibliothek</span>`;
+          return `
+            <div class="lt-ai-series-item">
+              <div>
+                <span class="lt-ai-series-item__title">${orderStr}${title}</span>
+              </div>
+              <div>${badge}</div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    body.innerHTML = `
+      <div style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+        <span class="lt-badge lt-badge--warning">⚠️ KI-Vorschlag, ungeprüft</span>
+      </div>
+      <p style="margin-bottom: 8px;"><strong>Reihe:</strong> ${seriesName}</p>
+      <div class="lt-ai-series-list">
+        ${booksHtml}
+      </div>
+      <p style="margin-top: 12px; font-size: 12px; color: var(--lt-text-secondary);">
+        Hinweis: Fehlende Bände können manuell über den ISBN-Scanner erfasst werden.
+      </p>
+    `;
+  } catch (err) {
+    const errorMsg = (err && (err.message || err.error || err)) || "Unbekannter Fehler";
+    let userHint = "Fehler beim Laden des KI-Serienvorschlags.";
+    if (typeof errorMsg === "string" && (errorMsg.includes("ai_task_not_available") || errorMsg.includes("nicht verfügbar") || errorMsg.includes("not configured"))) {
+      userHint = "Es ist keine ai_task-Entität (KI-Provider) in Home Assistant konfiguriert oder der Dienst ist nicht verfügbar.";
+    }
+    body.innerHTML = `
+      <div style="margin-bottom: 12px;">
+        <span class="lt-badge lt-badge--warning">⚠️ KI-Vorschlag, ungeprüft</span>
+      </div>
+      <div class="lt-alert lt-alert--error">
+        ${escapeHtml(userHint)}<br/>
+        <small>(${escapeHtml(errorMsg)})</small>
+      </div>
+    `;
+  }
+}
+
 // Utility
 function escapeHtml(str) {
   if (!str) return "";
@@ -615,6 +768,17 @@ function switchToTab(tabId) {
 document.addEventListener("DOMContentLoaded", () => {
   // Apply saved title/theme immediately, independent of HA login state.
   applySettings(loadSettings());
+
+  // AI Series Dialog close buttons
+  const aiSeriesDialog = document.getElementById("ai-series-dialog");
+  const btnCloseAiSeries = document.getElementById("btn-close-ai-series-dialog");
+  const btnCancelAiSeries = document.getElementById("btn-cancel-ai-series-dialog");
+  if (btnCloseAiSeries && aiSeriesDialog) {
+    btnCloseAiSeries.addEventListener("click", () => aiSeriesDialog.close());
+  }
+  if (btnCancelAiSeries && aiSeriesDialog) {
+    btnCancelAiSeries.addEventListener("click", () => aiSeriesDialog.close());
+  }
 
   // Settings Dialog
   const settingsDialog = document.getElementById("settings-dialog");
@@ -677,9 +841,19 @@ document.addEventListener("DOMContentLoaded", () => {
       filterChips.forEach((c) => c.classList.remove("lt-chip--active"));
       chip.classList.add("lt-chip--active");
       currentFilter = chip.dataset.filter;
+      currentSeriesFilterId = null;
       loadBooks();
     });
   });
+
+  // Clear Series Filter Button
+  const btnClearSeriesFilter = document.getElementById("btn-clear-series-filter");
+  if (btnClearSeriesFilter) {
+    btnClearSeriesFilter.addEventListener("click", () => {
+      currentSeriesFilterId = null;
+      loadBooks();
+    });
+  }
 
   // Free-text Search
   const searchInput = document.getElementById("books-search-input");
@@ -726,6 +900,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const status = document.getElementById("form-status").value;
     const ratingStr = document.getElementById("form-rating-val").value;
     const rating = ratingStr ? parseInt(ratingStr, 10) : null;
+    const seriesId = document.getElementById("form-series-id").value.trim() || null;
+    const seriesOrderStr = document.getElementById("form-series-order").value.trim();
+    const seriesOrder = seriesOrderStr ? parseInt(seriesOrderStr, 10) : null;
 
     if (!title || !author || (!bookId && !isbn)) {
       showToast("Titel, Autor und ISBN dürfen nicht leer sein.", true);
@@ -758,6 +935,8 @@ document.addEventListener("DOMContentLoaded", () => {
           cover_url: coverUrl,
           status,
           rating: rating,
+          series_id: seriesId,
+          series_order: seriesOrder,
         };
         await haClient.callWS(msg);
         showToast("Buch hinzugefügt.");

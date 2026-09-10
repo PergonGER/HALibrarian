@@ -12,6 +12,7 @@ from homeassistant.core import HomeAssistant
 import homeassistant.helpers.config_validation as cv
 from homeassistant.loader import async_get_integration
 
+from .ai_series import async_ai_series_lookup
 from .api import async_lookup_isbn
 from .const import CONF_GOOGLE_BOOKS_API_KEY, DOMAIN
 from .db import LibraryTrackerDatabase
@@ -71,6 +72,8 @@ async def ws_books_list(
         vol.Optional("rating"): vol.Maybe(
             vol.All(vol.Coerce(int), vol.Range(min=1, max=5))
         ),
+        vol.Optional("series_id"): vol.Maybe(vol.All(cv.string, vol.Strip)),
+        vol.Optional("series_order"): vol.Maybe(vol.Coerce(int)),
     }
 )
 @websocket_api.async_response
@@ -89,6 +92,8 @@ async def ws_books_add(
             msg.get("published_date"),
             msg.get("cover_url"),
             msg.get("rating"),
+            msg.get("series_id"),
+            msg.get("series_order"),
         )
         connection.send_result(msg["id"], book)
     except Exception as err:
@@ -98,9 +103,33 @@ async def ws_books_add(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "library_tracker/books/list_by_series",
+        vol.Required("series_id"): vol.All(cv.string, vol.Strip),
+        vol.Optional("exclude_book_id"): vol.Maybe(vol.Coerce(int)),
+    }
+)
+@websocket_api.async_response
+async def ws_books_list_by_series(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List all books in a series, optionally excluding a specific book."""
+    try:
+        db = _get_db(hass)
+        series_id = msg["series_id"]
+        exclude_book_id = msg.get("exclude_book_id")
+        books = await hass.async_add_executor_job(
+            db.get_books_by_series, series_id, exclude_book_id
+        )
+        connection.send_result(msg["id"], books)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/books/list_by_series: %s", err)
+        connection.send_error(msg["id"], "db_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "library_tracker/books/update",
         vol.Optional("book_id"): vol.Coerce(int),
-        vol.Optional("id"): vol.Coerce(int),
         vol.Optional("status"): vol.In(["gelesen", "ungelesen", "wunschliste"]),
         vol.Optional("rating"): vol.Maybe(
             vol.All(vol.Coerce(int), vol.Range(min=1, max=5))
@@ -118,10 +147,10 @@ async def ws_books_update(
     """Update an existing book."""
     try:
         db = _get_db(hass)
-        book_id = msg.get("book_id") or msg.get("id")
+        book_id = msg.get("book_id")
         if book_id is None:
             connection.send_error(
-                msg["id"], "invalid_format", "book_id or id is required"
+                msg["id"], "invalid_format", "book_id is required"
             )
             return
 
@@ -155,7 +184,6 @@ async def ws_books_update(
     {
         vol.Required("type"): "library_tracker/books/delete",
         vol.Optional("book_id"): vol.Coerce(int),
-        vol.Optional("id"): vol.Coerce(int),
     }
 )
 @websocket_api.async_response
@@ -165,10 +193,10 @@ async def ws_books_delete(
     """Delete a book by id."""
     try:
         db = _get_db(hass)
-        book_id = msg.get("book_id") or msg.get("id")
+        book_id = msg.get("book_id")
         if book_id is None:
             connection.send_error(
-                msg["id"], "invalid_format", "book_id or id is required"
+                msg["id"], "invalid_format", "book_id is required"
             )
             return
 
@@ -208,7 +236,6 @@ async def ws_authors_list(
     {
         vol.Required("type"): "library_tracker/authors/set_favorite",
         vol.Optional("author_id"): vol.Coerce(int),
-        vol.Optional("id"): vol.Coerce(int),
         vol.Required("is_favorite"): cv.boolean,
     }
 )
@@ -219,10 +246,10 @@ async def ws_authors_set_favorite(
     """Set favorite status of an author."""
     try:
         db = _get_db(hass)
-        author_id = msg.get("author_id") or msg.get("id")
+        author_id = msg.get("author_id")
         if author_id is None:
             connection.send_error(
-                msg["id"], "invalid_format", "author_id or id is required"
+                msg["id"], "invalid_format", "author_id is required"
             )
             return
 
@@ -245,7 +272,6 @@ async def ws_authors_set_favorite(
     {
         vol.Required("type"): "library_tracker/authors/set_rating",
         vol.Optional("author_id"): vol.Coerce(int),
-        vol.Optional("id"): vol.Coerce(int),
         vol.Required("rating"): vol.Maybe(
             vol.All(vol.Coerce(int), vol.Range(min=1, max=5))
         ),
@@ -258,10 +284,10 @@ async def ws_authors_set_rating(
     """Set or clear rating of an author."""
     try:
         db = _get_db(hass)
-        author_id = msg.get("author_id") or msg.get("id")
+        author_id = msg.get("author_id")
         if author_id is None:
             connection.send_error(
-                msg["id"], "invalid_format", "author_id or id is required"
+                msg["id"], "invalid_format", "author_id is required"
             )
             return
 
@@ -278,6 +304,42 @@ async def ws_authors_set_rating(
     except Exception as err:
         _LOGGER.error("Error in library_tracker/authors/set_rating: %s", err)
         connection.send_error(msg["id"], "db_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "library_tracker/books/ai_series_lookup",
+        vol.Required("book_id"): vol.Coerce(int),
+    }
+)
+@websocket_api.async_response
+async def ws_books_ai_series_lookup(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """WS command to perform AI series lookup for a book."""
+    try:
+        db = _get_db(hass)
+        book_id = msg["book_id"]
+        book = await hass.async_add_executor_job(db.get_book, book_id)
+        if book is None:
+            connection.send_error(
+                msg["id"], "not_found", f"Book with id {book_id} not found"
+            )
+            return
+
+        result = await async_ai_series_lookup(hass, book["title"], book["author"])
+        if result is None:
+            connection.send_error(
+                msg["id"],
+                "ai_task_not_available",
+                "KI-Serien-Suche ist fehlgeschlagen oder es ist keine ai_task-Entität konfiguriert.",
+            )
+            return
+
+        connection.send_result(msg["id"], result)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/books/ai_series_lookup: %s", err)
+        connection.send_error(msg["id"], "ai_task_error", str(err))
 
 
 @websocket_api.websocket_command(
@@ -335,6 +397,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
 
     websocket_api.async_register_command(hass, ws_books_list)
     websocket_api.async_register_command(hass, ws_books_add)
+    websocket_api.async_register_command(hass, ws_books_list_by_series)
+    websocket_api.async_register_command(hass, ws_books_ai_series_lookup)
     websocket_api.async_register_command(hass, ws_books_update)
     websocket_api.async_register_command(hass, ws_books_delete)
     websocket_api.async_register_command(hass, ws_authors_list)

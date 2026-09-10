@@ -356,6 +356,53 @@ body {
   color: var(--lt-accent);
 }
 
+.lt-badge--warning {
+  background: rgba(255, 152, 0, 0.2);
+  color: #f57c00;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+}
+
+.lt-ai-series-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.lt-ai-series-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--lt-bg);
+  border: 1px solid var(--lt-divider);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.lt-ai-series-item__title {
+  font-weight: 500;
+}
+
+.lt-badge--series {
+  background: rgba(156, 39, 176, 0.15);
+  color: #ab47bc;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  margin-top: 4px;
+}
+
+.lt-badge--series:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.lt-alert--info {
+  background: rgba(3, 169, 244, 0.15);
+  color: var(--lt-primary);
+  border: 1px solid var(--lt-primary);
+}
+
 .lt-book-card__actions {
   display: flex;
   gap: 6px;
