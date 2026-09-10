@@ -32,7 +32,6 @@ class LibraryTrackerPanel extends HTMLElement {
   }
 
   connectedCallback() {
-    this._patchGetElementById();
     if (this._hass && !this._initialized) {
       this._init();
     }
@@ -42,19 +41,37 @@ class LibraryTrackerPanel extends HTMLElement {
     this._stopScanner();
   }
 
-  _patchGetElementById() {
-    if (document.getElementById.__lt_patched) return;
+  // html5-qrcode looks up its target element via the *global*
+  // document.getElementById("qr-reader") internally and cannot see into
+  // our shadow root. Rather than permanently replacing
+  // document.getElementById for the whole HA frontend (which would risk
+  // silently redirecting unrelated lookups from other panels/cards into
+  // our shadow root), patch it only transiently, only for that one exact
+  // id, and only while an html5-qrcode call is actually running.
+  _withPatchedGetElementById(fn) {
     const origGet = document.getElementById.bind(document);
     const self = this;
     document.getElementById = function (id) {
-      const el = origGet(id);
-      if (el) return el;
-      if (self && self.shadowRoot) {
-        return self.shadowRoot.getElementById(id);
+      if (id === "qr-reader" && self.shadowRoot) {
+        const el = self.shadowRoot.getElementById(id);
+        if (el) return el;
       }
-      return null;
+      return origGet(id);
     };
-    document.getElementById.__lt_patched = true;
+    const restore = () => {
+      document.getElementById = origGet;
+    };
+    try {
+      const result = fn();
+      if (result && typeof result.finally === "function") {
+        return result.finally(restore);
+      }
+      restore();
+      return result;
+    } catch (err) {
+      restore();
+      throw err;
+    }
   }
 
   $(selector) {
@@ -99,7 +116,7 @@ class LibraryTrackerPanel extends HTMLElement {
               <button id="btn-open-add-dialog" class="lt-btn lt-btn--primary">+ Buch hinzufügen</button>
             </div>
 
-            <div id="series-filter-banner" class="lt-alert lt-alert--info" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;" hidden>
+            <div id="series-filter-banner" class="lt-alert lt-alert--info lt-series-filter-banner" hidden>
               <span>📚 Filter: Bücher derselben Buchreihe</span>
               <button id="btn-clear-series-filter" class="lt-btn lt-btn--secondary lt-btn--sm">Filter aufheben</button>
             </div>
@@ -304,12 +321,16 @@ class LibraryTrackerPanel extends HTMLElement {
       titleEl.textContent = settings.title && settings.title.trim() ? settings.title.trim() : "Library Tracker";
     }
 
+    // Scoped to :host only — this used to also mirror onto
+    // document.documentElement when the panel ran inside its own iframe
+    // document. Now that the panel is a web component in HA's real
+    // top-level document, that would leak our private per-device theme
+    // setting onto HA's actual <html> element. :host[data-theme=...] in
+    // style.css already covers the shadow-scoped styling.
     if (settings.theme === "light" || settings.theme === "dark") {
       this.dataset.theme = settings.theme;
-      document.documentElement.dataset.theme = settings.theme;
     } else {
       delete this.dataset.theme;
-      delete document.documentElement.dataset.theme;
     }
 
     const booksGrid = this.$("#books-list");
@@ -779,38 +800,42 @@ class LibraryTrackerPanel extends HTMLElement {
     }
 
     if (!this._html5QrCode) {
-      this._html5QrCode = new window.Html5Qrcode("qr-reader");
+      this._withPatchedGetElementById(() => {
+        this._html5QrCode = new window.Html5Qrcode("qr-reader");
+      });
     }
 
     const config = { fps: 10, qrbox: { width: 250, height: 150 } };
 
-    this._html5QrCode
-      .start(
-        { facingMode: "environment" },
-        config,
-        (decodedText) => {
-          this._showToast(`Barcode erkannt: ${decodedText}`);
-          this._handleIsbnLookup(decodedText.trim());
-          setTimeout(() => this._stopScanner(), 0);
-        },
-        () => {}
-      )
-      .then(() => {
-        this.$("#btn-start-scanner").disabled = true;
-        this.$("#btn-stop-scanner").disabled = false;
-      })
-      .catch((err) => {
-        let msg = "Kamerazugriff fehlgeschlagen.";
-        if (err && err.toString().includes("NotAllowedError")) {
-          msg = "Kamerazugriff wurde im Browser verweigert. Bitte Berechtigung erteilen.";
-        } else if (err && err.toString().includes("NotFoundError")) {
-          msg = "Keine geeignete Kamera gefunden.";
-        } else if (err) {
-          msg += " (" + err + ")";
-        }
-        errorEl.textContent = msg;
-        errorEl.hidden = false;
-      });
+    this._withPatchedGetElementById(() =>
+      this._html5QrCode
+        .start(
+          { facingMode: "environment" },
+          config,
+          (decodedText) => {
+            this._showToast(`Barcode erkannt: ${decodedText}`);
+            this._handleIsbnLookup(decodedText.trim());
+            setTimeout(() => this._stopScanner(), 0);
+          },
+          () => {}
+        )
+        .then(() => {
+          this.$("#btn-start-scanner").disabled = true;
+          this.$("#btn-stop-scanner").disabled = false;
+        })
+        .catch((err) => {
+          let msg = "Kamerazugriff fehlgeschlagen.";
+          if (err && err.toString().includes("NotAllowedError")) {
+            msg = "Kamerazugriff wurde im Browser verweigert. Bitte Berechtigung erteilen.";
+          } else if (err && err.toString().includes("NotFoundError")) {
+            msg = "Keine geeignete Kamera gefunden.";
+          } else if (err) {
+            msg += " (" + err + ")";
+          }
+          errorEl.textContent = msg;
+          errorEl.hidden = false;
+        })
+    );
   }
 
   _stopScanner() {

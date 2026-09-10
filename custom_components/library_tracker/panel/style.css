@@ -23,7 +23,6 @@
  * localStorage as a data-theme attribute on <library-tracker-panel> or <html>)
  */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]),
   :host:not([data-theme="light"]) {
     --lt-primary: #29b6f6;
     --lt-primary-dark: #0288d1;
@@ -40,7 +39,6 @@
   }
 }
 
-:root[data-theme="dark"],
 :host[data-theme="dark"] {
   --lt-primary: #29b6f6;
   --lt-primary-dark: #0288d1;
@@ -56,7 +54,6 @@
   --lt-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.6);
 }
 
-:root[data-theme="light"],
 :host[data-theme="light"] {
   --lt-primary: #03a9f4;
   --lt-primary-dark: #0288d1;
@@ -391,6 +388,17 @@ body {
   background: rgba(3, 169, 244, 0.15);
   color: var(--lt-primary);
   border: 1px solid var(--lt-primary);
+}
+
+/* display:flex only via class, never inline — an inline style on an
+   element that also carries [hidden] would always win over the
+   browser's default "[hidden] { display: none }" rule and keep it
+   visible regardless of the `hidden` property set from app.js. */
+.lt-series-filter-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
 .lt-book-card__actions {
