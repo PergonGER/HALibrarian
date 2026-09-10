@@ -42,6 +42,8 @@ def test_add_and_get_book(db: LibraryTrackerDatabase) -> None:
         published_date="1988",
         cover_url="https://example.com/cover.jpg",
         rating=5,
+        series_id="series_123",
+        series_order=1,
     )
 
     assert book["id"] is not None
@@ -50,14 +52,66 @@ def test_add_and_get_book(db: LibraryTrackerDatabase) -> None:
     assert book["author"] == "Brian W. Kernighan"
     assert book["status"] == "gelesen"
     assert book["rating"] == 5
+    assert book["series_id"] == "series_123"
+    assert book["series_order"] == 1
 
     books = db.get_books()
     assert len(books) == 1
     assert books[0]["id"] == book["id"]
+    assert books[0]["series_id"] == "series_123"
 
     single = db.get_book(book["id"])
     assert single is not None
     assert single["title"] == "The C Programming Language"
+    assert single["series_id"] == "series_123"
+
+
+def test_get_books_by_series(db: LibraryTrackerDatabase) -> None:
+    """Test retrieving books belonging to a series."""
+    book1 = db.add_book(
+        isbn="111",
+        title="Series Vol 2",
+        author_name="Author A",
+        status="gelesen",
+        series_id="series_abc",
+        series_order=2,
+    )
+    book2 = db.add_book(
+        isbn="222",
+        title="Series Vol 1",
+        author_name="Author A",
+        status="gelesen",
+        series_id="series_abc",
+        series_order=1,
+    )
+    book3 = db.add_book(
+        isbn="333",
+        title="Series Vol Extra",
+        author_name="Author A",
+        status="ungelesen",
+        series_id="series_abc",
+        series_order=None,
+    )
+    db.add_book(
+        isbn="444",
+        title="Other Book",
+        author_name="Author B",
+        status="gelesen",
+        series_id="series_xyz",
+        series_order=1,
+    )
+
+    series_books = db.get_books_by_series("series_abc")
+    assert len(series_books) == 3
+    # Order should be Vol 1 (order 1), Vol 2 (order 2), Vol Extra (order None)
+    assert series_books[0]["id"] == book2["id"]
+    assert series_books[1]["id"] == book1["id"]
+    assert series_books[2]["id"] == book3["id"]
+
+    # Exclude book 2 (Vol 1)
+    filtered_series = db.get_books_by_series("series_abc", exclude_book_id=book2["id"])
+    assert len(filtered_series) == 2
+    assert [b["id"] for b in filtered_series] == [book1["id"], book3["id"]]
 
 
 def test_get_books_status_filter(db: LibraryTrackerDatabase) -> None:

@@ -6,8 +6,9 @@ console.info("[library_tracker] Loading panel application...");
 let haClient = null;
 let currentFilter = "all";
 let currentSearchQuery = "";
+let currentSeriesFilterId = null;
 let html5QrCode = null;
-let currentBooksRaw = []; // status-filtered books as returned by the backend
+let currentBooksRaw = []; // status-filtered or series-filtered books as returned by the backend
 let currentBooks = []; // currentBooksRaw further filtered by the search box, i.e. what's actually rendered
 let currentAuthors = [];
 
@@ -154,11 +155,22 @@ async function connectWithToken(token) {
 async function loadBooks() {
   if (!haClient) return;
   try {
-    const msg = { type: "library_tracker/books/list" };
-    if (currentFilter !== "all") {
-      msg.status = currentFilter;
+    const banner = document.getElementById("series-filter-banner");
+    if (currentSeriesFilterId) {
+      if (banner) banner.hidden = false;
+      const msg = {
+        type: "library_tracker/books/list_by_series",
+        series_id: currentSeriesFilterId,
+      };
+      currentBooksRaw = await haClient.callWS(msg);
+    } else {
+      if (banner) banner.hidden = true;
+      const msg = { type: "library_tracker/books/list" };
+      if (currentFilter !== "all") {
+        msg.status = currentFilter;
+      }
+      currentBooksRaw = await haClient.callWS(msg);
     }
-    currentBooksRaw = await haClient.callWS(msg);
     applySearchFilterAndRender();
   } catch (err) {
     showToast("Fehler beim Laden der Bücher: " + (err.message || err), true);
@@ -230,6 +242,14 @@ function renderBooks(books) {
       }
     });
 
+    let seriesBadgeHtml = "";
+    if (book.series_id) {
+      const label = book.series_order
+        ? `Teil ${escapeHtml(book.series_order)} der Reihe`
+        : "Teil einer Reihe";
+      seriesBadgeHtml = `<div><span class="lt-badge lt-badge--series btn-series-link" title="Alle Bücher dieser Reihe anzeigen">📚 ${label}</span></div>`;
+    }
+
     card.innerHTML = `
       ${coverHtml}
       <div class="lt-book-card__content">
@@ -240,6 +260,7 @@ function renderBooks(books) {
             <span class="lt-badge lt-badge--${escapeHtml(book.status)}">${escapeHtml(book.status)}</span>
             ${book.published_date ? ` • ${escapeHtml(book.published_date)}` : ""}
           </p>
+          ${seriesBadgeHtml}
         </div>
         <div class="lt-book-card__rating-container"></div>
         <div class="lt-book-card__actions">
@@ -249,6 +270,14 @@ function renderBooks(books) {
         </div>
       </div>
     `;
+
+    const seriesLink = card.querySelector(".btn-series-link");
+    if (seriesLink) {
+      seriesLink.addEventListener("click", () => {
+        currentSeriesFilterId = book.series_id;
+        loadBooks();
+      });
+    }
 
     card.querySelector(".lt-book-card__rating-container").appendChild(starsEl);
 
@@ -433,6 +462,8 @@ function openBookDialog(book = null) {
   if (book) {
     titleEl.textContent = "Buch bearbeiten";
     document.getElementById("form-book-id").value = book.id;
+    document.getElementById("form-series-id").value = book.series_id || "";
+    document.getElementById("form-series-order").value = book.series_order != null ? book.series_order : "";
     isbnInput.value = book.isbn || "";
     // ISBN is immutable once a book exists - library_tracker/books/update
     // doesn't accept an isbn field, so editing it here would silently be
@@ -446,6 +477,8 @@ function openBookDialog(book = null) {
   } else {
     titleEl.textContent = "Buch hinzufügen";
     document.getElementById("form-book-id").value = "";
+    document.getElementById("form-series-id").value = "";
+    document.getElementById("form-series-order").value = "";
     isbnInput.readOnly = false;
     document.getElementById("form-status").value = "ungelesen";
   }
@@ -506,6 +539,8 @@ async function handleIsbnLookup(isbn) {
     document.getElementById("form-author").value = meta.author || "";
     document.getElementById("form-published-date").value = meta.published_date || "";
     document.getElementById("form-cover-url").value = meta.cover_url || "";
+    document.getElementById("form-series-id").value = meta.series_id || "";
+    document.getElementById("form-series-order").value = meta.series_order != null ? meta.series_order : "";
     showToast("Buchmetadaten gefunden!");
   } catch (err) {
     showToast("Keine Buchmetadaten gefunden: " + (err.message || err), true);
@@ -677,9 +712,19 @@ document.addEventListener("DOMContentLoaded", () => {
       filterChips.forEach((c) => c.classList.remove("lt-chip--active"));
       chip.classList.add("lt-chip--active");
       currentFilter = chip.dataset.filter;
+      currentSeriesFilterId = null;
       loadBooks();
     });
   });
+
+  // Clear Series Filter Button
+  const btnClearSeriesFilter = document.getElementById("btn-clear-series-filter");
+  if (btnClearSeriesFilter) {
+    btnClearSeriesFilter.addEventListener("click", () => {
+      currentSeriesFilterId = null;
+      loadBooks();
+    });
+  }
 
   // Free-text Search
   const searchInput = document.getElementById("books-search-input");
@@ -726,6 +771,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const status = document.getElementById("form-status").value;
     const ratingStr = document.getElementById("form-rating-val").value;
     const rating = ratingStr ? parseInt(ratingStr, 10) : null;
+    const seriesId = document.getElementById("form-series-id").value.trim() || null;
+    const seriesOrderStr = document.getElementById("form-series-order").value.trim();
+    const seriesOrder = seriesOrderStr ? parseInt(seriesOrderStr, 10) : null;
 
     if (!title || !author || (!bookId && !isbn)) {
       showToast("Titel, Autor und ISBN dürfen nicht leer sein.", true);
@@ -758,6 +806,8 @@ document.addEventListener("DOMContentLoaded", () => {
           cover_url: coverUrl,
           status,
           rating: rating,
+          series_id: seriesId,
+          series_order: seriesOrder,
         };
         await haClient.callWS(msg);
         showToast("Buch hinzugefügt.");

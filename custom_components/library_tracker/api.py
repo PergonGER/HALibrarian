@@ -96,12 +96,32 @@ async def _async_query_google_books(
         if cover_url and cover_url.startswith("http://"):
             cover_url = "https://" + cover_url[7:]
 
+        series_id: str | None = None
+        series_order: int | None = None
+        series_info = volume_info.get("seriesInfo")
+        if isinstance(series_info, dict):
+            volume_series = series_info.get("volumeSeries")
+            if isinstance(volume_series, list) and volume_series:
+                first_series = volume_series[0]
+                if isinstance(first_series, dict):
+                    s_id = first_series.get("seriesId")
+                    if s_id and isinstance(s_id, str):
+                        series_id = s_id
+                    raw_order = first_series.get("orderNumber")
+                    if raw_order is not None:
+                        try:
+                            series_order = int(raw_order)
+                        except (ValueError, TypeError):
+                            series_order = None
+
         return {
             "isbn": isbn,
             "title": title,
             "author": author,
             "published_date": published_date,
             "cover_url": cover_url or "",
+            "series_id": series_id,
+            "series_order": series_order,
             "source": "google_books",
         }
 

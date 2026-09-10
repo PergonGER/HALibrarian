@@ -39,6 +39,14 @@ async def test_async_lookup_isbn_google_success() -> None:
                         "imageLinks": {
                             "thumbnail": "http://books.google.com/books/cover.jpg"
                         },
+                        "seriesInfo": {
+                            "volumeSeries": [
+                                {
+                                    "seriesId": "series_c_prog",
+                                    "orderNumber": "1"
+                                }
+                            ]
+                        }
                     }
                 }
             ],
@@ -63,6 +71,8 @@ async def test_async_lookup_isbn_google_success() -> None:
     assert result["author"] == "Robert C. Martin"
     assert result["published_date"] == "2008-08-01"
     assert result["cover_url"] == "https://books.google.com/books/cover.jpg"
+    assert result["series_id"] == "series_c_prog"
+    assert result["series_order"] == 1
     assert result["source"] == "google_books"
 
 
