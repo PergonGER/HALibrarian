@@ -17,6 +17,7 @@ from custom_components.library_tracker.websocket_api import (
     async_register_websocket_commands,
     ws_authors_list,
     ws_authors_set_favorite,
+    ws_authors_set_rating,
     ws_books_add,
     ws_books_delete,
     ws_books_list,
@@ -52,7 +53,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 7
+        assert mock_register.call_count == 8
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -181,6 +182,95 @@ async def test_ws_authors_list_and_favorite(mock_hass: HomeAssistant) -> None:
     conn.send_result.assert_called_once()
     updated_author = conn.send_result.call_args[0][1]
     assert updated_author["is_favorite"] is True
+
+
+@pytest.mark.asyncio
+async def test_ws_authors_set_rating(mock_hass: HomeAssistant) -> None:
+    """Test setting author rating via WebSocket handler."""
+    conn = MagicMock()
+
+    # Add book to auto-create author
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 1,
+            "type": "library_tracker/books/add",
+            "isbn": "111",
+            "title": "Book 1",
+            "author": "Famous Author",
+            "status": "gelesen",
+        },
+    )
+
+    # Get author id
+    conn.reset_mock()
+    await inspect.unwrap(ws_authors_list)(
+        mock_hass, conn, {"id": 2, "type": "library_tracker/authors/list"}
+    )
+    authors = conn.send_result.call_args[0][1]
+    author_id = authors[0]["id"]
+
+    # Set rating to 4
+    conn.reset_mock()
+    await inspect.unwrap(ws_authors_set_rating)(
+        mock_hass,
+        conn,
+        {
+            "id": 3,
+            "type": "library_tracker/authors/set_rating",
+            "author_id": author_id,
+            "rating": 4,
+        },
+    )
+    conn.send_result.assert_called_once()
+    updated_author = conn.send_result.call_args[0][1]
+    assert updated_author["rating"] == 4
+
+    # Clear rating
+    conn.reset_mock()
+    await inspect.unwrap(ws_authors_set_rating)(
+        mock_hass,
+        conn,
+        {
+            "id": 4,
+            "type": "library_tracker/authors/set_rating",
+            "author_id": author_id,
+            "rating": None,
+        },
+    )
+    conn.send_result.assert_called_once()
+    updated_author = conn.send_result.call_args[0][1]
+    assert updated_author["rating"] is None
+
+    # Error case: unknown author_id
+    conn.reset_mock()
+    await inspect.unwrap(ws_authors_set_rating)(
+        mock_hass,
+        conn,
+        {
+            "id": 5,
+            "type": "library_tracker/authors/set_rating",
+            "author_id": 999,
+            "rating": 3,
+        },
+    )
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "not_found"
+
+    # Error case: missing author_id
+    conn.reset_mock()
+    await inspect.unwrap(ws_authors_set_rating)(
+        mock_hass,
+        conn,
+        {
+            "id": 6,
+            "type": "library_tracker/authors/set_rating",
+            "rating": 3,
+        },
+    )
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "invalid_format"
 
 
 @pytest.mark.asyncio
