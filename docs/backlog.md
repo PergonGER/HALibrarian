@@ -24,3 +24,24 @@ nur eine Merkliste, damit nichts verloren geht.
   eine CSS-Variable, die `grid-template-columns` steuert, statt
   `repeat(auto-fill, minmax(280px, 1fr))` fest vorzugeben. (Hinzugefügt:
   2026-09-10)
+
+- **Hinweis auf andere Bände derselben Buchreihe (z. B. "Herr der
+  Ringe" Teil 1 → Verweis auf Teil 2/3).** Recherchiert am 2026-09-10,
+  **mit wichtiger Einschränkung**: Google Books liefert bei manchen
+  Büchern `volumeInfo.seriesInfo.volumeSeries[].seriesId` +
+  `orderNumber`, aber es gibt **keinen API-Endpunkt, um nach allen
+  Büchern einer `seriesId` zu suchen** — das Feld lässt sich nur bei
+  bereits bekannten Büchern auslesen, nicht zum Finden fehlender Bände
+  nutzen. Abdeckung außerdem lückenhaft (v. a. bei deutschen/älteren
+  Ausgaben oft nicht gesetzt). Realistischer Umsetzungsweg:
+  1. Zuverlässig, kein zusätzlicher Aufwand: bereits vorhandene
+     Autor-Klick-Filterung (zeigt alle Bücher desselben Autors in der
+     eigenen Bibliothek) als Serien-Ersatz kommunizieren/hervorheben.
+  2. Optional, unsicher: `seriesId` beim ISBN-Lookup mitspeichern
+     (neue Spalte `Books.series_id`, `Books.series_order`) und in der
+     eigenen Bibliothek Bücher mit gleicher `seriesId` verlinken — hilft
+     nur, wenn Google das Feld für die jeweilige Ausgabe überhaupt
+     füllt, und findet nie automatisch fehlende Bände, die man noch
+     nicht erfasst hat. Vor Umsetzung mit Nutzer klären, ob dieser
+     eingeschränkte Nutzen die Komplexität rechtfertigt. (Hinzugefügt:
+     2026-09-10)
