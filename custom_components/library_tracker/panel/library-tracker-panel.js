@@ -87,7 +87,7 @@ class LibraryTrackerPanel extends HTMLElement {
     this._initialized = true;
 
     this.shadowRoot.innerHTML = `
-      <link rel="stylesheet" href="/api/library_tracker/panel/style.css" />
+      <link rel="stylesheet" href="/library_tracker_panel/style.css" />
       <header class="lt-header">
         <div class="lt-header__left">
           <span class="lt-header__icon">📚</span>
@@ -779,7 +779,7 @@ class LibraryTrackerPanel extends HTMLElement {
     }
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "/api/library_tracker/panel/html5-qrcode.min.js";
+      script.src = "/library_tracker_panel/html5-qrcode.min.js";
       script.onload = () => resolve();
       script.onerror = () => reject(new Error("Fehler beim Laden von html5-qrcode.min.js"));
       document.head.appendChild(script);
