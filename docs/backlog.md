@@ -18,7 +18,18 @@ nur eine Merkliste, damit nichts verloren geht.
   Frontend. Weiterhin nur Verlinkung bereits selbst erfasster Bücher
   möglich (siehe Einschränkung unten) — Issue #12 (KI-gestützte
   Serien-Vorschläge via `ai_task`, ergänzend) adressiert genau diese
-  Lücke, siehe unten.
+  Lücke, siehe direkt unten.
+- ~~KI-gestützte Serien-Vorschläge~~ — umgesetzt 2026-09-10 via Issue
+  #12, v0.10.0. Jules-PR #21 hatte einen echten Bug (`ai_task.
+  async_generate_data()` gibt ein `GenDataTaskResult`-Objekt zurück,
+  kein dict — `isinstance(result, dict)`-Check griff nie, Funktion
+  landete immer im leeren Fallback); Jules hat auf das
+  `REQUEST_CHANGES`-Review mit einem inhaltsleeren Commit reagiert
+  (identischer Tree-Hash, bekanntes Muster). Auf Nutzer-Autorisierung
+  hin selbst gefixt (`result.data` statt `result`) und über PR #22
+  gemergt. **Noch nicht live gegen einen echten `ai_task`-Provider
+  getestet** — bitte bei Gelegenheit verifizieren (Button im
+  Buch-Detail-Popup bei einem Buch ohne `series_id`).
 - ~~Buch hinzufügen: Teilangaben reichen, Rest wird automatisch
   ergänzt~~ — umgesetzt 2026-09-10 via Jules-PR #19 (Issue #17,
   v0.8.0): Google-Books-Freitextsuche im Buch-hinzufügen-Dialog,
@@ -75,8 +86,3 @@ nur eine Merkliste, damit nichts verloren geht.
     potenziell mehrere Folge-Abfragen (KI-Erkennung + je Titel eine
     Google-Books-Suche) — Nutzer sollte das vorher absehen können
     (Rate-Limits/Kosten seines KI-Providers).
-- **KI-gestützte Serien-Vorschläge** (Issue #12, ergänzt #10) — als
-  letztes der drei `library-tracker-panel.js`-Features gelabelt
-  (2026-09-10, main auf v0.9.0). Issue-Text aktualisiert: Platzierung
-  des Buttons jetzt im Buch-Detail-Popup (#18) statt direkt auf der
-  Karte, da die Karte inzwischen bewusst minimal ist.
