@@ -27,9 +27,8 @@ nur eine Merkliste, damit nichts verloren geht.
   `REQUEST_CHANGES`-Review mit einem inhaltsleeren Commit reagiert
   (identischer Tree-Hash, bekanntes Muster). Auf Nutzer-Autorisierung
   hin selbst gefixt (`result.data` statt `result`) und über PR #22
-  gemergt. **Noch nicht live gegen einen echten `ai_task`-Provider
-  getestet** — bitte bei Gelegenheit verifizieren (Button im
-  Buch-Detail-Popup bei einem Buch ohne `series_id`).
+  gemergt. **Live gegen echten `ai_task`-Provider (Gemini) auf iOS
+  bestätigt funktionierend** (2026-09-11).
 - ~~Buch hinzufügen: Teilangaben reichen, Rest wird automatisch
   ergänzt~~ — umgesetzt 2026-09-10 via Jules-PR #19 (Issue #17,
   v0.8.0): Google-Books-Freitextsuche im Buch-hinzufügen-Dialog,
@@ -45,7 +44,8 @@ nur eine Merkliste, damit nichts verloren geht.
   keine Code-Ursache mehr, sondern die `getUserMedia`-Secure-Context-
   Anforderung (HTTPS) — gelöst durch Einrichtung von Nabu Casa auf
   deiner Seite. README enthält den Hintergrund für künftige Nutzer mit
-  demselben Problem.
+  demselben Problem. **Kamera-Scanner auf iOS bestätigt funktionierend**
+  (2026-09-11).
 
 ## Offen
 
