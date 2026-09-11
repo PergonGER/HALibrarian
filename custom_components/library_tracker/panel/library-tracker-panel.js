@@ -1,6 +1,14 @@
 // Library Tracker – Custom Panel Web Component
 // Communicates directly with Home Assistant WebSocket API via this.hass.callWS(...)
 
+// Cache-busting: __init__.py appends ?v=<integration version> to this
+// module's own URL so a new release forces a fresh fetch of the module
+// itself. Reuse that same query string for the sibling static assets
+// (style.css, html5-qrcode.min.js) below, which are fetched separately
+// and would otherwise keep serving a stale cached copy under the same
+// unversioned URL even after the module itself updated.
+const CACHE_BUST = new URL(import.meta.url).search;
+
 class LibraryTrackerPanel extends HTMLElement {
   constructor() {
     super();
@@ -87,7 +95,7 @@ class LibraryTrackerPanel extends HTMLElement {
     this._initialized = true;
 
     this.shadowRoot.innerHTML = `
-      <link rel="stylesheet" href="/library_tracker_panel/style.css" />
+      <link rel="stylesheet" href="/library_tracker_panel/style.css${CACHE_BUST}" />
       <header class="lt-header">
         <div class="lt-header__left">
           <span class="lt-header__icon">📚</span>
@@ -1028,7 +1036,7 @@ class LibraryTrackerPanel extends HTMLElement {
     }
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "/library_tracker_panel/html5-qrcode.min.js";
+      script.src = `/library_tracker_panel/html5-qrcode.min.js${CACHE_BUST}`;
       script.onload = () => resolve();
       script.onerror = () => reject(new Error("Fehler beim Laden von html5-qrcode.min.js"));
       document.head.appendChild(script);

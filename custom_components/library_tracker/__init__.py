@@ -12,6 +12,7 @@ from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.loader import async_get_integration
 
 from .const import (
     DB_FILENAME,
@@ -97,11 +98,26 @@ async def _async_register_panel(hass: HomeAssistant) -> None:
         ]
     )
 
+    # Cache-busting: append the integration version as a query string, so a
+    # new release forces browsers/WebViews to fetch a fresh copy of the
+    # panel module (and, via import.meta.url in the module itself, of
+    # style.css/html5-qrcode.min.js too) instead of serving a stale cached
+    # one that happens to have the same URL. cache_headers=False alone
+    # doesn't help here - it only affects HTTP caching, not aggressive
+    # module caches some WebViews keep across app restarts (root cause of
+    # several "same URL, old behavior" bugs seen during development).
+    try:
+        integration = await async_get_integration(hass, DOMAIN)
+        cache_bust = f"?v={integration.version}"
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception("Could not determine integration version for cache-busting")
+        cache_bust = ""
+
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_URL_PATH,
         webcomponent_name="library-tracker-panel",
-        module_url=f"{STATIC_URL_BASE}/library-tracker-panel.js",
+        module_url=f"{STATIC_URL_BASE}/library-tracker-panel.js{cache_bust}",
         embed_iframe=False,
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
