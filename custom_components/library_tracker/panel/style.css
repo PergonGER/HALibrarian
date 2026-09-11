@@ -289,6 +289,13 @@ body {
 }
 
 .lt-book-card {
+  /* Reset <button> defaults (border/font/text-align/width) - it's a real
+     button now for reliable click handling on Android WebView, see
+     _renderBooks(). */
+  border: none;
+  font: inherit;
+  text-align: left;
+  width: 100%;
   background: var(--lt-card-bg);
   border-radius: 8px;
   box-shadow: var(--lt-shadow);

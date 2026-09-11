@@ -517,7 +517,16 @@ class LibraryTrackerPanel extends HTMLElement {
     }
 
     books.forEach((book) => {
-      const card = document.createElement("div");
+      // Real <button>, not a <div> with only a click listener: some
+      // Android WebViews (incl. the HA Companion App, which relies on the
+      // system WebView component) dispatch synthetic click events
+      // unreliably on non-native-interactive elements, while native
+      // <button>/<a> elements always work. Confirmed by the user: the
+      // card's click handler fired reliably in mobile Chrome but not in
+      // the Companion App, while real <button>s elsewhere (e.g. the
+      // settings gear) worked fine in both.
+      const card = document.createElement("button");
+      card.type = "button";
       card.className = "lt-book-card";
 
       let coverHtml;
