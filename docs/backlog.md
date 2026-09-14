@@ -67,8 +67,9 @@ nur eine Merkliste, damit nichts verloren geht.
   2026-09-10, weiterhin relevant für Issue #12): kein Google-Books-API-
   Endpunkt, um nach allen Büchern einer `seriesId` zu suchen, keine
   automatische Lückenerkennung fehlender Bände.
-- **Regalfoto → KI-Massenerkennung/-Import** (Nutzerwunsch 2026-09-10):
-  Foto eines ganzen Bücherregals aufnehmen, KI erkennt einzelne Bücher
+- **Regalfoto → KI-Massenerkennung/-Import** — **auf Eis gelegt**
+  (Nutzer-Entscheidung 2026-09-14, kein Zeitplan). Nutzerwunsch vom
+  2026-09-10: Foto eines ganzen Bücherregals aufnehmen, KI erkennt einzelne Bücher
   (Titel/Autor anhand Buchrücken) und schlägt sie zum Import vor.
   Technisch grundsätzlich machbar, verifiziert am HA-Core-Quellcode
   (`ai_task/task.py`): `async_generate_data()` akzeptiert einen
