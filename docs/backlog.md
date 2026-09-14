@@ -46,6 +46,20 @@ nur eine Merkliste, damit nichts verloren geht.
   deiner Seite. README enthält den Hintergrund für künftige Nutzer mit
   demselben Problem. **Kamera-Scanner auf iOS bestätigt funktionierend**
   (2026-09-11).
+- ~~Buchkarten-Klick öffnete Detail-Popup nicht in der HA Companion
+  App (Android)~~ — umgesetzt 2026-09-11 (v0.10.2): Karte war ein
+  `<div>` mit nur `addEventListener("click", ...)`, kein natives
+  interaktives Element — manche Android-WebViews liefern synthetische
+  Klick-Events darauf unzuverlässig. Fix: Karte ist jetzt ein echtes
+  `<button type="button">`. Funktionierte bereits vorher im normalen
+  mobilen Browser, nur die App-WebView war betroffen. Bestätigt
+  funktionierend (2026-09-14).
+- ~~Design: kantige Elemente, moderneres/weicheres Erscheinungsbild
+  gewünscht~~ — umgesetzt 2026-09-11 (v0.11.0): einheitliche
+  Radius-Skala (`--lt-radius-sm/md/lg`, 8/12/18px) statt verstreuter
+  2–8px-Einzelwerte, weichere zweischichtige Schatten statt harter
+  Einzelschatten, in hellem und dunklem Theme konsistent. Bestätigt
+  gefallen (2026-09-14).
 
 ## Offen
 
