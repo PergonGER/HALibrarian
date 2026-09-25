@@ -37,6 +37,19 @@ Kommende Ausbaustufen (siehe Projekt-Blueprint):
    "HA Library Tracker" suchen und einrichten.
 4. In der Seitenleiste erscheint der Menüpunkt "Library Tracker".
 
+## Nach einem Update (HACS oder manuell)
+
+Ein Datei-Update allein (z. B. über HACS) wird von Home Assistant nie
+automatisch übernommen — das gilt für jede Integration, nicht nur diese.
+Danach reicht ein einfaches **Neuladen der Integration** (Einstellungen
+→ Geräte & Dienste → HA Library Tracker → ⋮ → Neu laden), ein voller
+HA-Neustart ist nicht nötig: Beim Neuladen wird auch das Panel mit einer
+frischen, versionsabhängigen Cache-Bust-Kennung neu registriert (siehe
+`_async_register_panel` in `__init__.py`), damit Browser/WebViews nicht
+weiter eine alte, zwischengespeicherte Version von
+`library-tracker-panel.js` verwenden. Anschließend die App/den Browser-
+Tab einmal neu laden, damit die neue Panel-Registrierung dort ankommt.
+
 ## Hinweis zum Kamera-Scanner (ab Session 3)
 
 Der Barcode-Scanner nutzt `getUserMedia` und benötigt daher einen
