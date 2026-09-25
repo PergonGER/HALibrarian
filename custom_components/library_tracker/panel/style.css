@@ -582,6 +582,73 @@ body {
   flex-grow: 1;
 }
 
+/* Duplicate matches list in duplicate dialog */
+.lt-duplicate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.lt-duplicate-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  background: var(--lt-bg);
+  border: 1px solid var(--lt-divider);
+  border-radius: var(--lt-radius-md);
+  box-shadow: var(--lt-shadow);
+}
+
+.lt-duplicate-item__cover {
+  width: 40px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-divider);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.lt-duplicate-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex-grow: 1;
+}
+
+.lt-duplicate-item__title {
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-duplicate-item__author {
+  font-size: 13px;
+  color: var(--lt-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lt-duplicate-item__meta {
+  font-size: 12px;
+  color: var(--lt-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
 /* Search results dropdown/list in Add Book dialog */
 .lt-search-results {
   max-height: 220px;

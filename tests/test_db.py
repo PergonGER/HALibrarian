@@ -234,6 +234,108 @@ def test_author_rating(db: LibraryTrackerDatabase) -> None:
         db.set_author_rating(alpha_id, 6)
 
 
+def test_find_and_get_duplicate_books(db: LibraryTrackerDatabase) -> None:
+    """Test duplicate book checking and listing."""
+    # Add initial books
+    book1 = db.add_book(
+        isbn="9780131103627",
+        title="The C Programming Language",
+        author_name="Brian W. Kernighan",
+        status="gelesen",
+    )
+    book2 = db.add_book(
+        isbn="",
+        title="Dune",
+        author_name="Frank Herbert",
+        status="ungelesen",
+    )
+
+    # Check non-duplicate
+    matches_none = db.find_duplicate_books(
+        isbn="9780000000000",
+        title="Unique Title",
+        author="Unique Author",
+    )
+    assert len(matches_none) == 0
+
+    # Check match by ISBN
+    matches_isbn = db.find_duplicate_books(
+        isbn="9780131103627",
+        title="Different Title",
+        author="Different Author",
+    )
+    assert len(matches_isbn) == 1
+    assert matches_isbn[0]["id"] == book1["id"]
+
+    # Check match by empty ISBN fallback on Title + Author (case-insensitive & trimmed)
+    matches_title_author = db.find_duplicate_books(
+        isbn="",
+        title="  dune  ",
+        author="frank herbert",
+    )
+    assert len(matches_title_author) == 1
+    assert matches_title_author[0]["id"] == book2["id"]
+
+    # Check empty ISBN + non-matching title/author yields no duplicate
+    matches_empty_isbn_different = db.find_duplicate_books(
+        isbn="",
+        title="Another Book",
+        author="Frank Herbert",
+    )
+    assert len(matches_empty_isbn_different) == 0
+
+    # Initially, no duplicate groups exist in DB
+    assert len(db.get_duplicate_books()) == 0
+
+    # Add duplicate of book1 (same ISBN)
+    book1_dup = db.add_book(
+        isbn="9780131103627",
+        title="The C Programming Language 2nd Ed",
+        author_name="Brian W. Kernighan",
+        status="ungelesen",
+    )
+
+    # Add duplicate of book2 (both empty ISBN, same title + author)
+    book2_dup = db.add_book(
+        isbn="",
+        title="Dune",
+        author_name="Frank Herbert",
+        status="wunschliste",
+    )
+
+    duplicate_books = db.get_duplicate_books()
+    dup_ids = [b["id"] for b in duplicate_books]
+    assert len(duplicate_books) == 4
+    assert book1["id"] in dup_ids
+    assert book1_dup["id"] in dup_ids
+    assert book2["id"] in dup_ids
+    assert book2_dup["id"] in dup_ids
+
+
+def test_get_duplicate_books_mixed_isbn_presence(db: LibraryTrackerDatabase) -> None:
+    """A book with an ISBN and one without must still group as duplicates
+    via title+author, exactly like find_duplicate_books already does at
+    add-time - otherwise a book flagged as a duplicate when added could
+    silently vanish from the persisted duplicates list afterwards.
+    """
+    with_isbn = db.add_book(
+        isbn="9780131103627",
+        title="The C Programming Language",
+        author_name="Brian W. Kernighan",
+        status="gelesen",
+    )
+    without_isbn = db.add_book(
+        isbn="",
+        title="  the c programming language  ",
+        author_name="brian w. kernighan",
+        status="ungelesen",
+    )
+
+    duplicate_books = db.get_duplicate_books()
+    dup_ids = {b["id"] for b in duplicate_books}
+    assert dup_ids == {with_isbn["id"], without_isbn["id"]}
+
+
 def test_migration_existing_authors_table() -> None:
     """Test migration against an existing Authors table without rating column."""
     with tempfile.TemporaryDirectory() as tmpdir:

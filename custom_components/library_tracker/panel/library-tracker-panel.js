@@ -120,6 +120,7 @@ class LibraryTrackerPanel extends HTMLElement {
                 <button class="lt-chip" data-filter="gelesen">Gelesen</button>
                 <button class="lt-chip" data-filter="ungelesen">Ungelesen</button>
                 <button class="lt-chip" data-filter="wunschliste">Wunschliste</button>
+                <button class="lt-chip" data-filter="duplikate">Duplikate</button>
               </div>
               <button id="btn-open-add-dialog" class="lt-btn lt-btn--primary">+ Buch hinzufügen</button>
             </div>
@@ -282,6 +283,22 @@ class LibraryTrackerPanel extends HTMLElement {
               <button type="submit" id="btn-save-book" class="lt-btn lt-btn--primary">Speichern</button>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- DUPLICATE CHECK DIALOG -->
+      <div id="duplicate-dialog" class="lt-dialog-overlay" hidden>
+        <div class="lt-dialog__content">
+          <div class="lt-dialog__header">
+            <h3>Duplikat gefunden</h3>
+            <button id="btn-close-duplicate-dialog" class="lt-dialog__close">&times;</button>
+          </div>
+          <p>Dieses Buch ist bereits in der Bibliothek vorhanden — trotzdem als zusätzliches Exemplar speichern?</p>
+          <div id="duplicate-matches-list" class="lt-duplicate-list"></div>
+          <div class="lt-form__actions">
+            <button type="button" id="btn-duplicate-cancel" class="lt-btn lt-btn--secondary">Abbrechen</button>
+            <button type="button" id="btn-duplicate-confirm" class="lt-btn lt-btn--primary">Trotzdem hinzufügen</button>
+          </div>
         </div>
       </div>
 
@@ -470,6 +487,10 @@ class LibraryTrackerPanel extends HTMLElement {
           type: "library_tracker/books/list_by_series",
           series_id: this._currentSeriesFilterId,
         };
+        this._currentBooksRaw = await this._hass.callWS(msg);
+      } else if (this._currentFilter === "duplikate") {
+        if (banner) banner.hidden = true;
+        const msg = { type: "library_tracker/books/list_duplicates" };
         this._currentBooksRaw = await this._hass.callWS(msg);
       } else {
         if (banner) banner.hidden = true;
@@ -988,6 +1009,59 @@ class LibraryTrackerPanel extends HTMLElement {
     }
   }
 
+  _showDuplicateDialog(duplicates) {
+    return new Promise((resolve) => {
+      const dialog = this.$("#duplicate-dialog");
+      const matchesContainer = this.$("#duplicate-matches-list");
+      if (matchesContainer) {
+        matchesContainer.innerHTML = "";
+        duplicates.forEach((book) => {
+          const item = document.createElement("div");
+          item.className = "lt-duplicate-item";
+
+          let coverHtml = book.cover_url
+            ? `<img src="${this._escapeHtml(book.cover_url)}" class="lt-duplicate-item__cover" alt="Cover" />`
+            : `<div class="lt-duplicate-item__cover">📖</div>`;
+
+          let statusHtml = book.status
+            ? `<span class="lt-badge lt-badge--${this._escapeHtml(book.status)}">${this._escapeHtml(book.status)}</span>`
+            : "";
+
+          item.innerHTML = `
+            ${coverHtml}
+            <div class="lt-duplicate-item__info">
+              <div class="lt-duplicate-item__title">${this._escapeHtml(book.title)}</div>
+              <div class="lt-duplicate-item__author">${this._escapeHtml(book.author)}</div>
+              <div class="lt-duplicate-item__meta">${statusHtml} ${book.isbn ? `• ISBN: ${this._escapeHtml(book.isbn)}` : ""}</div>
+            </div>
+          `;
+          matchesContainer.appendChild(item);
+        });
+      }
+
+      const btnConfirm = this.$("#btn-duplicate-confirm");
+      const btnCancel = this.$("#btn-duplicate-cancel");
+      const btnClose = this.$("#btn-close-duplicate-dialog");
+
+      const cleanup = (result) => {
+        btnConfirm.removeEventListener("click", onConfirm);
+        btnCancel.removeEventListener("click", onCancel);
+        if (btnClose) btnClose.removeEventListener("click", onCancel);
+        dialog.hidden = true;
+        resolve(result);
+      };
+
+      const onConfirm = () => cleanup(true);
+      const onCancel = () => cleanup(false);
+
+      btnConfirm.addEventListener("click", onConfirm);
+      btnCancel.addEventListener("click", onCancel);
+      if (btnClose) btnClose.addEventListener("click", onCancel);
+
+      dialog.hidden = false;
+    });
+  }
+
   _showConfirmDialog(message) {
     return new Promise((resolve) => {
       const dialog = this.$("#confirm-dialog");
@@ -1293,6 +1367,21 @@ class LibraryTrackerPanel extends HTMLElement {
           await this._hass.callWS(msg);
           this._showToast("Buch aktualisiert.");
         } else {
+          // Check for duplicates before adding
+          const duplicates = await this._hass.callWS({
+            type: "library_tracker/books/check_duplicates",
+            isbn,
+            title,
+            author,
+          });
+
+          if (duplicates && duplicates.length > 0) {
+            const proceed = await this._showDuplicateDialog(duplicates);
+            if (!proceed) {
+              return;
+            }
+          }
+
           const msg = {
             type: "library_tracker/books/add",
             isbn,
