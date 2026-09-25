@@ -7,6 +7,16 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~"+Buch hinzufügen"-Button entfernt, Freitextsuche ins
+  ISBN-Scanner-Feld integriert~~ — umgesetzt 2026-09-25 via Jules-PR #28
+  (Issue #27, v0.13.0): Ein Eingabefeld im ISBN-Scanner-Tab für ISBN
+  **und** Freitext, automatische Erkennung anhand des Inhalts
+  (10/13-stellig digit-only → ISBN-Lookup, sonst Google-Books-
+  Freitextsuche). Bei keinem Treffer bzw. Fehler öffnet sich das
+  Hinzufügen-Formular trotzdem (mit dem Suchtext als Titel-Vorbefüllung)
+  für die manuelle Eingabe — kein separater Button mehr nötig. Freitext-
+  Feld im Formular selbst (`#book-dialog`) entfernt, da jetzt redundant.
+  Kein Merge-Konflikt, sauberer Review.
 - ~~Anzahl-Anzeige + Gruppierung im Duplikate-Filter~~ — umgesetzt
   2026-09-25 via Jules-PR #26 (Issue #25, v0.12.4): "X Bücher"-Anzeige
   über der Liste bei jedem Filter, im Duplikate-Filter zusätzlich
