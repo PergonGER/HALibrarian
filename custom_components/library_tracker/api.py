@@ -214,7 +214,25 @@ async def _async_query_google_books(
         if parsed is None:
             return None
 
-        if not parsed["isbn"]:
+        # Google's `q=isbn:{isbn}` endpoint is a text search, not a
+        # guaranteed exact lookup - for an ISBN that isn't well indexed it
+        # has been observed returning the top text match for a completely
+        # unrelated book instead of no result. Only trust the match when
+        # the item's own identifiers actually confirm the ISBN we asked
+        # for (or it didn't report one at all); otherwise treat this as no
+        # reliable match so the caller falls back to Open Library instead
+        # of silently substituting the wrong book.
+        returned_isbn = parsed["isbn"]
+        if returned_isbn and returned_isbn != isbn:
+            _LOGGER.info(
+                "Google Books item for query ISBN %s reports ISBN %s - "
+                "mismatch, discarding as unreliable match.",
+                isbn,
+                returned_isbn,
+            )
+            return None
+
+        if not returned_isbn:
             parsed["isbn"] = isbn
 
         return parsed

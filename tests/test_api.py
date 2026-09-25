@@ -121,6 +121,67 @@ async def test_async_lookup_isbn_fallback_to_open_library() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_lookup_isbn_google_isbn_mismatch_falls_back() -> None:
+    """Google's isbn: search is a text search, not an exact lookup - it can
+    return a completely unrelated book for an ISBN it doesn't have well
+    indexed. If the returned item's own ISBN contradicts the one we
+    queried, that match must be discarded (falling back to Open Library)
+    instead of silently handing back the wrong book's metadata.
+    """
+    mock_hass = MagicMock()
+    mock_session = MagicMock()
+
+    mock_google_resp = AsyncMock()
+    mock_google_resp.status = 200
+    mock_google_resp.json = AsyncMock(
+        return_value={
+            "totalItems": 1,
+            "items": [
+                {
+                    "volumeInfo": {
+                        "title": "Gefühlte Dreißig - Ein Hoffnungsbote",
+                        "authors": ["Bernd Gieseking"],
+                        "industryIdentifiers": [
+                            {
+                                "type": "ISBN_13",
+                                "identifier": "9783596703616",
+                            }
+                        ],
+                    }
+                }
+            ],
+        }
+    )
+    mock_google_cm = AsyncMock()
+    mock_google_cm.__aenter__.return_value = mock_google_resp
+
+    mock_ol_resp = AsyncMock()
+    mock_ol_resp.status = 200
+    mock_ol_resp.json = AsyncMock(
+        return_value={
+            "ISBN:9783596703678": {
+                "title": "Correct Book From Open Library",
+                "authors": [{"name": "Correct Author"}],
+            }
+        }
+    )
+    mock_ol_cm = AsyncMock()
+    mock_ol_cm.__aenter__.return_value = mock_ol_resp
+
+    mock_session.get.side_effect = [mock_google_cm, mock_ol_cm]
+
+    with patch(
+        "custom_components.library_tracker.api.async_get_clientsession",
+        return_value=mock_session,
+    ):
+        result = await async_lookup_isbn(mock_hass, "9783596703678")
+
+    assert result is not None
+    assert result["title"] == "Correct Book From Open Library"
+    assert result["source"] == "open_library"
+
+
+@pytest.mark.asyncio
 async def test_async_lookup_isbn_not_found() -> None:
     """Test lookup when neither API finds the book."""
     mock_hass = MagicMock()
