@@ -260,6 +260,7 @@ body {
 
 .lt-filter-chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
