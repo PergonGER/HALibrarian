@@ -262,6 +262,13 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  /* As a flex item of .lt-toolbar, this would otherwise size itself to
+     fit all chips in one row (flex-basis: auto = content width) and never
+     actually become narrower than that row - so its own flex-wrap never
+     had anything to react to. Forcing the basis to the full toolbar width
+     is what makes the wrap above take effect on narrow screens. */
+  flex: 1 1 100%;
+  min-width: 0;
 }
 
 .lt-chip {
