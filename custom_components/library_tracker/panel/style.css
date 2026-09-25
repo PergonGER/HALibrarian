@@ -293,6 +293,35 @@ body {
   color: #ffffff !important;
 }
 
+/* Books Count */
+.lt-books-count {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lt-text-secondary);
+  margin-bottom: 12px;
+}
+
+/* Duplicate Grouping */
+.lt-duplicate-group {
+  margin-bottom: 24px;
+}
+
+.lt-duplicate-group__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--lt-divider);
+  margin-bottom: 12px;
+}
+
+.lt-duplicate-group__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--lt-text-secondary);
+}
+
 /* Books Grid & Cards */
 .lt-books-grid {
   display: grid;
