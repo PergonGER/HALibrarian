@@ -122,7 +122,6 @@ class LibraryTrackerPanel extends HTMLElement {
                 <button class="lt-chip" data-filter="wunschliste">Wunschliste</button>
                 <button class="lt-chip" data-filter="duplikate">Duplikate</button>
               </div>
-              <button id="btn-open-add-dialog" class="lt-btn lt-btn--primary">+ Buch hinzufügen</button>
             </div>
 
             <div id="series-filter-banner" class="lt-alert lt-alert--info lt-series-filter-banner" hidden>
@@ -169,12 +168,13 @@ class LibraryTrackerPanel extends HTMLElement {
             </div>
 
             <div class="lt-card" style="margin-top: 1rem;">
-              <h2>Manuelle ISBN-Suche</h2>
-              <p>ISBN direkt eingeben (z. B. 9783453318113):</p>
+              <h2>Buch suchen</h2>
+              <p>ISBN, Titel oder Autor direkt eingeben:</p>
               <div class="lt-search-box">
-                <input type="text" id="manual-isbn-input" placeholder="ISBN-10 oder ISBN-13" />
-                <button id="btn-manual-lookup" class="lt-btn lt-btn--primary">ISBN suchen</button>
+                <input type="text" id="manual-search-input" placeholder="ISBN, Titel oder Autor eingeben" />
+                <button id="btn-manual-search" class="lt-btn lt-btn--primary">Suchen</button>
               </div>
+              <div id="manual-search-results" class="lt-search-results" hidden style="margin-top: 12px;"></div>
             </div>
           </section>
         </div>
@@ -229,16 +229,6 @@ class LibraryTrackerPanel extends HTMLElement {
             <input type="hidden" id="form-book-id" value="" />
             <input type="hidden" id="form-series-id" value="" />
             <input type="hidden" id="form-series-order" value="" />
-
-            <div class="lt-form__group" id="form-text-search-group">
-              <label for="form-text-search">Freitextsuche (Google Books)</label>
-              <div class="lt-search-box" style="max-width: 100%;">
-                <input type="text" id="form-text-search" placeholder="Titel und/oder Autor eingeben" />
-                <button type="button" id="btn-text-search" class="lt-btn lt-btn--primary">Suchen</button>
-              </div>
-            </div>
-
-            <div id="text-search-results" class="lt-search-results" hidden></div>
 
             <div class="lt-form__group">
               <label for="form-isbn">ISBN *</label>
@@ -987,20 +977,6 @@ class LibraryTrackerPanel extends HTMLElement {
 
     form.reset();
 
-    const textSearchInput = this.$("#form-text-search");
-    if (textSearchInput) textSearchInput.value = "";
-
-    const resultsContainer = this.$("#text-search-results");
-    if (resultsContainer) {
-      resultsContainer.hidden = true;
-      resultsContainer.innerHTML = "";
-    }
-
-    const textSearchGroup = this.$("#form-text-search-group");
-    if (textSearchGroup) {
-      textSearchGroup.hidden = !!book;
-    }
-
     const starsContainer = this.$("#form-rating-stars");
     starsContainer.innerHTML = "";
     const ratingValInput = this.$("#form-rating-val");
@@ -1041,28 +1017,12 @@ class LibraryTrackerPanel extends HTMLElement {
 
   _closeBookDialog() {
     const dialog = this.$("#book-dialog");
-    const textSearchInput = this.$("#form-text-search");
-    if (textSearchInput) textSearchInput.value = "";
-
-    const resultsContainer = this.$("#text-search-results");
-    if (resultsContainer) {
-      resultsContainer.hidden = true;
-      resultsContainer.innerHTML = "";
-    }
-
     dialog.hidden = true;
   }
 
-  async _handleTextSearch() {
-    const searchInput = this.$("#form-text-search");
-    const resultsContainer = this.$("#text-search-results");
-    if (!searchInput || !resultsContainer) return;
-
-    const query = searchInput.value.trim();
-    if (!query) {
-      this._showToast("Bitte einen Suchbegriff eingeben.", true);
-      return;
-    }
+  async _handleScannerTextSearch(query) {
+    const resultsContainer = this.$("#manual-search-results");
+    if (!resultsContainer) return;
 
     resultsContainer.innerHTML = '<div class="lt-search-results__empty">Suche nach Treffern …</div>';
     resultsContainer.hidden = false;
@@ -1075,7 +1035,10 @@ class LibraryTrackerPanel extends HTMLElement {
 
       resultsContainer.innerHTML = "";
       if (!results || results.length === 0) {
-        resultsContainer.innerHTML = '<div class="lt-search-results__empty">Keine Treffer gefunden, bitte manuell eingeben</div>';
+        resultsContainer.hidden = true;
+        this._showToast("Keine Treffer gefunden — Formular für manuelle Eingabe geöffnet.");
+        this._openBookDialog();
+        this.$("#form-title").value = query;
         return;
       }
 
@@ -1102,6 +1065,7 @@ class LibraryTrackerPanel extends HTMLElement {
         `;
 
         itemEl.querySelector(".btn-select-result").addEventListener("click", () => {
+          this._openBookDialog();
           this.$("#form-title").value = item.title || "";
           this.$("#form-author").value = item.author || "";
           this.$("#form-isbn").value = item.isbn || "";
@@ -1118,7 +1082,10 @@ class LibraryTrackerPanel extends HTMLElement {
         resultsContainer.appendChild(itemEl);
       });
     } catch (err) {
-      resultsContainer.innerHTML = `<div class="lt-search-results__empty">Fehler bei der Suche: ${this._escapeHtml(err.message || err)}</div>`;
+      resultsContainer.hidden = true;
+      this._showToast("Fehler bei der Suche: " + (err.message || err), true);
+      this._openBookDialog();
+      this.$("#form-title").value = query;
     }
   }
 
@@ -1424,25 +1391,9 @@ class LibraryTrackerPanel extends HTMLElement {
       btnCloseDetail.addEventListener("click", () => this._closeBookDetailDialog());
     }
 
-    // Dialog Trigger & Actions
-    this.$("#btn-open-add-dialog").addEventListener("click", () => this._openBookDialog());
+    // Dialog Actions
     this.$("#btn-close-dialog").addEventListener("click", () => this._closeBookDialog());
     this.$("#btn-cancel-dialog").addEventListener("click", () => this._closeBookDialog());
-
-    const btnTextSearch = this.$("#btn-text-search");
-    if (btnTextSearch) {
-      btnTextSearch.addEventListener("click", () => this._handleTextSearch());
-    }
-
-    const textSearchInput = this.$("#form-text-search");
-    if (textSearchInput) {
-      textSearchInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          this._handleTextSearch();
-        }
-      });
-    }
 
     // Form Submission (Add or Edit)
     this.$("#book-form").addEventListener("submit", async (e) => {
@@ -1522,11 +1473,47 @@ class LibraryTrackerPanel extends HTMLElement {
     this.$("#btn-start-scanner").addEventListener("click", () => this._startScanner());
     this.$("#btn-stop-scanner").addEventListener("click", () => this._stopScanner());
 
-    // Manual ISBN Lookup
-    this.$("#btn-manual-lookup").addEventListener("click", () => {
-      const isbn = this.$("#manual-isbn-input").value.trim();
-      this._handleIsbnLookup(isbn);
-    });
+    // Merged ISBN / Free-Text Search
+    const triggerSearch = () => {
+      const searchInput = this.$("#manual-search-input");
+      if (!searchInput) return;
+      const rawVal = searchInput.value.trim();
+      if (!rawVal) {
+        this._showToast("Bitte ISBN, Titel oder Autor eingeben.", true);
+        return;
+      }
+
+      // Hide previous results list if present
+      const resultsContainer = this.$("#manual-search-results");
+      if (resultsContainer) {
+        resultsContainer.hidden = true;
+        resultsContainer.innerHTML = "";
+      }
+
+      const cleaned = rawVal.replace(/[\s-]/g, "");
+      const isIsbn = /^[0-9]{9}[0-9X]$/i.test(cleaned) || /^[0-9]{13}$/.test(cleaned);
+
+      if (isIsbn) {
+        this._handleIsbnLookup(cleaned);
+      } else {
+        this._handleScannerTextSearch(rawVal);
+      }
+    };
+
+    const btnManualSearch = this.$("#btn-manual-search");
+    if (btnManualSearch) {
+      btnManualSearch.addEventListener("click", triggerSearch);
+    }
+
+    const manualSearchInput = this.$("#manual-search-input");
+    if (manualSearchInput) {
+      manualSearchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          triggerSearch();
+        }
+      });
+    }
   }
 }
 
