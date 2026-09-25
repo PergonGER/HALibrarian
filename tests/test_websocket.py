@@ -19,8 +19,10 @@ from custom_components.library_tracker.websocket_api import (
     ws_authors_set_favorite,
     ws_authors_set_rating,
     ws_books_add,
+    ws_books_check_duplicates,
     ws_books_delete,
     ws_books_list,
+    ws_books_list_duplicates,
     ws_books_search_text,
     ws_books_update,
     ws_lookup_isbn,
@@ -54,7 +56,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 12
+        assert mock_register.call_count == 14
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -92,6 +94,64 @@ async def test_ws_books_add_and_list(mock_hass: HomeAssistant) -> None:
     books = conn.send_result.call_args[0][1]
     assert len(books) == 1
     assert books[0]["isbn"] == "9780131103627"
+
+
+@pytest.mark.asyncio
+async def test_ws_books_check_and_list_duplicates(mock_hass: HomeAssistant) -> None:
+    """Test check_duplicates and list_duplicates WebSocket handlers."""
+    conn = MagicMock()
+
+    # Add initial book
+    add_msg = {
+        "id": 1,
+        "type": "library_tracker/books/add",
+        "isbn": "9780131103627",
+        "title": "The C Programming Language",
+        "author": "Kernighan",
+        "status": "gelesen",
+    }
+    await inspect.unwrap(ws_books_add)(mock_hass, conn, add_msg)
+
+    # Check duplicates matching ISBN
+    conn.reset_mock()
+    check_msg = {
+        "id": 2,
+        "type": "library_tracker/books/check_duplicates",
+        "isbn": "9780131103627",
+        "title": "Some Other Title",
+        "author": "Some Other Author",
+    }
+    await inspect.unwrap(ws_books_check_duplicates)(mock_hass, conn, check_msg)
+    conn.send_result.assert_called_once()
+    dups = conn.send_result.call_args[0][1]
+    assert len(dups) == 1
+    assert dups[0]["isbn"] == "9780131103627"
+
+    # List duplicates (none yet)
+    conn.reset_mock()
+    list_dup_msg = {"id": 3, "type": "library_tracker/books/list_duplicates"}
+    await inspect.unwrap(ws_books_list_duplicates)(mock_hass, conn, list_dup_msg)
+    conn.send_result.assert_called_once()
+    assert conn.send_result.call_args[0][1] == []
+
+    # Add duplicate book
+    conn.reset_mock()
+    add_dup_msg = {
+        "id": 4,
+        "type": "library_tracker/books/add",
+        "isbn": "9780131103627",
+        "title": "The C Programming Language Copy 2",
+        "author": "Kernighan",
+        "status": "ungelesen",
+    }
+    await inspect.unwrap(ws_books_add)(mock_hass, conn, add_dup_msg)
+
+    # List duplicates (now returns both)
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_list_duplicates)(mock_hass, conn, list_dup_msg)
+    conn.send_result.assert_called_once()
+    dup_list = conn.send_result.call_args[0][1]
+    assert len(dup_list) == 2
 
 
 @pytest.mark.asyncio

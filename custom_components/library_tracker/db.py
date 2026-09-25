@@ -109,6 +109,92 @@ class LibraryTrackerDatabase:
         row = cursor.fetchone()
         return int(row["id"])
 
+    def find_duplicate_books(
+        self, isbn: str | None, title: str, author: str
+    ) -> list[dict[str, Any]]:
+        """Find existing books matching duplicate criteria for given isbn, title, author."""
+        clean_isbn = isbn.strip() if isbn else ""
+        clean_title = title.strip()
+        clean_author = author.strip()
+
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT
+                    b.id,
+                    b.isbn,
+                    b.title,
+                    b.author_id,
+                    a.name AS author,
+                    b.published_date,
+                    b.cover_url,
+                    b.status,
+                    b.rating,
+                    b.series_id,
+                    b.series_order
+                FROM Books b
+                JOIN Authors a ON b.author_id = a.id
+            """
+            params: list[Any] = []
+            if clean_isbn:
+                query += """
+                    WHERE (TRIM(b.isbn) != '' AND TRIM(b.isbn) = ?)
+                       OR (TRIM(b.isbn) = '' AND LOWER(TRIM(b.title)) = LOWER(?) AND LOWER(TRIM(a.name)) = LOWER(?))
+                """
+                params.extend([clean_isbn, clean_title, clean_author])
+            else:
+                query += """
+                    WHERE LOWER(TRIM(b.title)) = LOWER(?)
+                      AND LOWER(TRIM(a.name)) = LOWER(?)
+                """
+                params.extend([clean_title, clean_author])
+
+            query += " ORDER BY b.id DESC"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    def get_duplicate_books(self) -> list[dict[str, Any]]:
+        """Retrieve all books that are part of a duplicate group."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT
+                    b.id,
+                    b.isbn,
+                    b.title,
+                    b.author_id,
+                    a.name AS author,
+                    b.published_date,
+                    b.cover_url,
+                    b.status,
+                    b.rating,
+                    b.series_id,
+                    b.series_order
+                FROM Books b
+                JOIN Authors a ON b.author_id = a.id
+                WHERE (
+                    TRIM(b.isbn) != '' AND EXISTS (
+                        SELECT 1 FROM Books b2
+                        WHERE b2.id != b.id
+                          AND TRIM(b2.isbn) = TRIM(b.isbn)
+                    )
+                ) OR (
+                    TRIM(b.isbn) = '' AND EXISTS (
+                        SELECT 1 FROM Books b2
+                        JOIN Authors a2 ON b2.author_id = a2.id
+                        WHERE b2.id != b.id
+                          AND TRIM(b2.isbn) = ''
+                          AND LOWER(TRIM(b2.title)) = LOWER(TRIM(b.title))
+                          AND LOWER(TRIM(a2.name)) = LOWER(TRIM(a.name))
+                    )
+                )
+                ORDER BY b.id DESC
+            """
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
     def get_books(self, status: str | None = None) -> list[dict[str, Any]]:
         """Retrieve all books, optionally filtered by status."""
         with self._get_connection() as conn:

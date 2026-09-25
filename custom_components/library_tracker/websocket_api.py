@@ -66,6 +66,52 @@ async def ws_books_list(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "library_tracker/books/check_duplicates",
+        vol.Optional("isbn", default=""): cv.string,
+        vol.Required("title"): vol.All(cv.string, vol.Strip),
+        vol.Required("author"): vol.All(cv.string, vol.Strip),
+    }
+)
+@websocket_api.async_response
+async def ws_books_check_duplicates(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Check for duplicate books matching ISBN or Title+Author."""
+    try:
+        db = _get_db(hass)
+        isbn = msg.get("isbn", "")
+        title = msg["title"]
+        author = msg["author"]
+        duplicates = await hass.async_add_executor_job(
+            db.find_duplicate_books, isbn, title, author
+        )
+        connection.send_result(msg["id"], duplicates)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/books/check_duplicates: %s", err)
+        connection.send_error(msg["id"], "db_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "library_tracker/books/list_duplicates",
+    }
+)
+@websocket_api.async_response
+async def ws_books_list_duplicates(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List all duplicate books in the library."""
+    try:
+        db = _get_db(hass)
+        duplicates = await hass.async_add_executor_job(db.get_duplicate_books)
+        connection.send_result(msg["id"], duplicates)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/books/list_duplicates: %s", err)
+        connection.send_error(msg["id"], "db_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "library_tracker/books/add",
         vol.Required("isbn"): vol.All(cv.string, vol.Strip),
         vol.Required("title"): vol.All(cv.string, vol.Strip),
@@ -421,6 +467,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         return
 
     websocket_api.async_register_command(hass, ws_books_list)
+    websocket_api.async_register_command(hass, ws_books_check_duplicates)
+    websocket_api.async_register_command(hass, ws_books_list_duplicates)
     websocket_api.async_register_command(hass, ws_books_add)
     websocket_api.async_register_command(hass, ws_books_list_by_series)
     websocket_api.async_register_command(hass, ws_books_update)
