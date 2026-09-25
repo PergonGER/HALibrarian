@@ -134,6 +134,8 @@ class LibraryTrackerPanel extends HTMLElement {
               <input type="text" id="books-search-input" placeholder="Suche nach Titel, Autor, ISBN, Erscheinungsjahr …" />
             </div>
 
+            <div id="books-count" class="lt-books-count"></div>
+
             <div id="books-list" class="lt-books-grid">
               <!-- Books cards rendered dynamically -->
             </div>
@@ -506,6 +508,89 @@ class LibraryTrackerPanel extends HTMLElement {
     }
   }
 
+  _groupDuplicates(books) {
+    if (!books || books.length === 0) return [];
+
+    const groups = [];
+
+    books.forEach((book) => {
+      const cleanIsbn = (book.isbn || "").trim();
+      const cleanTitle = (book.title || "").trim().toLowerCase();
+      const cleanAuthor = (book.author || "").trim().toLowerCase();
+
+      const matchingGroupIndices = [];
+
+      groups.forEach((group, idx) => {
+        const matches = group.books.some((gb) => {
+          const gbIsbn = (gb.isbn || "").trim();
+          const gbTitle = (gb.title || "").trim().toLowerCase();
+          const gbAuthor = (gb.author || "").trim().toLowerCase();
+
+          if (cleanIsbn && gbIsbn && cleanIsbn === gbIsbn) {
+            return true;
+          }
+
+          if (
+            (!cleanIsbn || !gbIsbn) &&
+            cleanTitle &&
+            gbTitle &&
+            cleanTitle === gbTitle &&
+            cleanAuthor &&
+            gbAuthor &&
+            cleanAuthor === gbAuthor
+          ) {
+            return true;
+          }
+
+          return false;
+        });
+
+        if (matches) {
+          matchingGroupIndices.push(idx);
+        }
+      });
+
+      if (matchingGroupIndices.length === 0) {
+        groups.push({
+          title: book.title || "",
+          author: book.author || "",
+          isbn: cleanIsbn,
+          books: [book],
+        });
+      } else if (matchingGroupIndices.length === 1) {
+        groups[matchingGroupIndices[0]].books.push(book);
+      } else {
+        const targetGroup = groups[matchingGroupIndices[0]];
+        targetGroup.books.push(book);
+
+        for (let i = matchingGroupIndices.length - 1; i > 0; i--) {
+          const gIdx = matchingGroupIndices[i];
+          const mergedGroup = groups.splice(gIdx, 1)[0];
+          targetGroup.books.push(...mergedGroup.books);
+        }
+      }
+    });
+
+    return groups;
+  }
+
+  _updateBooksCount(books) {
+    const countEl = this.$("#books-count");
+    if (!countEl) return;
+
+    const bookCount = books ? books.length : 0;
+    const bookText = `${bookCount} ${bookCount === 1 ? "Buch" : "Bücher"}`;
+
+    if (this._currentFilter === "duplikate") {
+      const groups = this._groupDuplicates(books);
+      const groupCount = groups.length;
+      const groupText = `${groupCount} ${groupCount === 1 ? "Gruppe" : "Gruppen"}`;
+      countEl.textContent = `${bookText} in ${groupText}`;
+    } else {
+      countEl.textContent = bookText;
+    }
+  }
+
   _applySearchFilterAndRender() {
     const query = this._currentSearchQuery.trim().toLowerCase();
     const filtered = !query
@@ -524,7 +609,35 @@ class LibraryTrackerPanel extends HTMLElement {
           return haystack.includes(query);
         });
     this._currentBooks = filtered;
+    this._updateBooksCount(filtered);
     this._renderBooks(filtered);
+  }
+
+  _createBookCard(book) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "lt-book-card";
+
+    let coverHtml;
+    if (book.cover_url) {
+      coverHtml = `<img src="${this._escapeHtml(book.cover_url)}" class="lt-book-card__cover" alt="Cover" />`;
+    } else {
+      coverHtml = `<div class="lt-book-card__cover">📖</div>`;
+    }
+
+    card.innerHTML = `
+      ${coverHtml}
+      <div class="lt-book-card__content">
+        <h4 class="lt-book-card__title" title="${this._escapeHtml(book.title)}">${this._escapeHtml(book.title)}</h4>
+        <p class="lt-book-card__author">${this._escapeHtml(book.author)}</p>
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      this._openBookDetailDialog(book);
+    });
+
+    return card;
   }
 
   _renderBooks(books) {
@@ -533,44 +646,44 @@ class LibraryTrackerPanel extends HTMLElement {
     container.innerHTML = "";
 
     if (!books || books.length === 0) {
+      container.classList.add("lt-books-grid");
       container.innerHTML = `<div class="lt-card" style="grid-column: 1 / -1; text-align: center; color: var(--lt-text-secondary);">Keine Bücher in dieser Ansicht vorhanden.</div>`;
       return;
     }
 
-    books.forEach((book) => {
-      // Real <button>, not a <div> with only a click listener: some
-      // Android WebViews (incl. the HA Companion App, which relies on the
-      // system WebView component) dispatch synthetic click events
-      // unreliably on non-native-interactive elements, while native
-      // <button>/<a> elements always work. Confirmed by the user: the
-      // card's click handler fired reliably in mobile Chrome but not in
-      // the Companion App, while real <button>s elsewhere (e.g. the
-      // settings gear) worked fine in both.
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = "lt-book-card";
+    if (this._currentFilter === "duplikate") {
+      container.classList.remove("lt-books-grid");
+      const groups = this._groupDuplicates(books);
 
-      let coverHtml;
-      if (book.cover_url) {
-        coverHtml = `<img src="${this._escapeHtml(book.cover_url)}" class="lt-book-card__cover" alt="Cover" />`;
-      } else {
-        coverHtml = `<div class="lt-book-card__cover">📖</div>`;
-      }
+      groups.forEach((group) => {
+        const groupEl = document.createElement("div");
+        groupEl.className = "lt-duplicate-group";
 
-      card.innerHTML = `
-        ${coverHtml}
-        <div class="lt-book-card__content">
-          <h4 class="lt-book-card__title" title="${this._escapeHtml(book.title)}">${this._escapeHtml(book.title)}</h4>
-          <p class="lt-book-card__author">${this._escapeHtml(book.author)}</p>
-        </div>
-      `;
+        const groupTitle = group.books[0]?.title || "";
+        const groupAuthor = group.books[0]?.author || "";
+        const count = group.books.length;
+        const countText = `${count} ${count === 1 ? "Exemplar" : "Exemplare"}`;
 
-      card.addEventListener("click", () => {
-        this._openBookDetailDialog(book);
+        groupEl.innerHTML = `
+          <div class="lt-duplicate-group__header">
+            <h3 class="lt-duplicate-group__title">${this._escapeHtml(groupTitle)} — ${this._escapeHtml(groupAuthor)} (${countText})</h3>
+          </div>
+          <div class="lt-books-grid"></div>
+        `;
+
+        const gridEl = groupEl.querySelector(".lt-books-grid");
+        group.books.forEach((book) => {
+          gridEl.appendChild(this._createBookCard(book));
+        });
+
+        container.appendChild(groupEl);
       });
-
-      container.appendChild(card);
-    });
+    } else {
+      container.classList.add("lt-books-grid");
+      books.forEach((book) => {
+        container.appendChild(this._createBookCard(book));
+      });
+    }
   }
 
   async _loadAuthors() {
