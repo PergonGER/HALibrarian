@@ -179,15 +179,19 @@ class LibraryTrackerDatabase:
                         WHERE b2.id != b.id
                           AND TRIM(b2.isbn) = TRIM(b.isbn)
                     )
-                ) OR (
-                    TRIM(b.isbn) = '' AND EXISTS (
-                        SELECT 1 FROM Books b2
-                        JOIN Authors a2 ON b2.author_id = a2.id
-                        WHERE b2.id != b.id
-                          AND TRIM(b2.isbn) = ''
-                          AND LOWER(TRIM(b2.title)) = LOWER(TRIM(b.title))
-                          AND LOWER(TRIM(a2.name)) = LOWER(TRIM(a.name))
-                    )
+                ) OR EXISTS (
+                    -- Title+author fallback: applies whenever EITHER side
+                    -- of the pair lacks an ISBN (mirrors
+                    -- find_duplicate_books, which uses the same rule at
+                    -- add-time) - not just when both are ISBN-less, or a
+                    -- book flagged as a duplicate on add could silently
+                    -- disappear from this list afterwards.
+                    SELECT 1 FROM Books b2
+                    JOIN Authors a2 ON b2.author_id = a2.id
+                    WHERE b2.id != b.id
+                      AND (TRIM(b.isbn) = '' OR TRIM(b2.isbn) = '')
+                      AND LOWER(TRIM(b2.title)) = LOWER(TRIM(b.title))
+                      AND LOWER(TRIM(a2.name)) = LOWER(TRIM(a.name))
                 )
                 ORDER BY b.id DESC
             """

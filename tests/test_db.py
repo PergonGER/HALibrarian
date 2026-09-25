@@ -312,6 +312,30 @@ def test_find_and_get_duplicate_books(db: LibraryTrackerDatabase) -> None:
     assert book2_dup["id"] in dup_ids
 
 
+def test_get_duplicate_books_mixed_isbn_presence(db: LibraryTrackerDatabase) -> None:
+    """A book with an ISBN and one without must still group as duplicates
+    via title+author, exactly like find_duplicate_books already does at
+    add-time - otherwise a book flagged as a duplicate when added could
+    silently vanish from the persisted duplicates list afterwards.
+    """
+    with_isbn = db.add_book(
+        isbn="9780131103627",
+        title="The C Programming Language",
+        author_name="Brian W. Kernighan",
+        status="gelesen",
+    )
+    without_isbn = db.add_book(
+        isbn="",
+        title="  the c programming language  ",
+        author_name="brian w. kernighan",
+        status="ungelesen",
+    )
+
+    duplicate_books = db.get_duplicate_books()
+    dup_ids = {b["id"] for b in duplicate_books}
+    assert dup_ids == {with_isbn["id"], without_isbn["id"]}
+
+
 def test_migration_existing_authors_table() -> None:
     """Test migration against an existing Authors table without rating column."""
     with tempfile.TemporaryDirectory() as tmpdir:
