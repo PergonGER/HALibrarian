@@ -7,6 +7,19 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Duplikat-Erkennung beim Hinzufügen + Duplikate-Filter~~ — umgesetzt
+  2026-09-25 via Jules-PR #24 (Issue #23, v0.12.0): Hinweis mit Abfrage
+  ("trotzdem als zusätzliches Exemplar speichern?") statt automatischer
+  Übernahme, neuer Filter-Chip "Duplikate" in der Hauptliste. Kriterium:
+  ISBN-Vergleich, wenn beide Bücher eine haben, sonst Titel+Autor
+  (case-insensitiv). Beim Review festgestellt und direkt selbst gefixt
+  (Ein-Datei-Fix in `db.py`, kein Grund für eine Jules-Runde): Jules'
+  `get_duplicate_books()` gruppierte ISBN- und Titel+Autor-Duplikate nur
+  getrennt voneinander, sodass ein Buchpaar mit nur einseitig
+  vorhandener ISBN beim Hinzufügen korrekt als Duplikat gemeldet, aber
+  anschließend nicht in der Duplikate-Liste angezeigt wurde — jetzt
+  einheitlich mit dem Add-Zeit-Check (`find_duplicate_books()`)
+  abgeglichen.
 - ~~Autorenliste: Autoren ohne Bücher ausblenden~~ — umgesetzt
   2026-09-10 (`db.get_authors()`, Favoriten bleiben sichtbar wegen der
   geplanten Autoren-Tracking-Funktion aus Session 4).
