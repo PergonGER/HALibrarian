@@ -7,6 +7,27 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Anzahl-Anzeige + Gruppierung im Duplikate-Filter~~ — umgesetzt
+  2026-09-25 via Jules-PR #26 (Issue #25, v0.12.4): "X Bücher"-Anzeige
+  über der Liste bei jedem Filter, im Duplikate-Filter zusätzlich
+  Gruppen-Anzahl ("X Bücher in Y Gruppen") sowie visuelle Gruppierung mit
+  Überschrift pro Duplikat-Gruppe (clientseitig, spiegelt exakt die
+  Backend-Gruppierungsregel aus PR #24). PR hatte einen Merge-Konflikt
+  in `manifest.json` (Jules startete auf v0.12.1, main war zwischenzeitlich
+  durch zwei Soforteinsätze — siehe unten — schon bei v0.12.3): direkt
+  aufgelöst (0.12.4), `style.css` mergte automatisch sauber.
+- ~~ISBN-Scan zeigte teils falsches Buch~~ — gefixt 2026-09-25 (v0.12.2,
+  direkter Fix, kein Jules-Issue): Googles `q=isbn:{isbn}`-Endpunkt ist
+  eine Textsuche, kein Exakt-Lookup — bei schlecht indexierten ISBNs kam
+  dadurch teils ein komplett anderes Buch zurück, dessen eigene ISBN von
+  der angefragten abwich, und wurde ungeprüft übernommen. Fix: Treffer
+  wird verworfen (Fallback auf Open Library), wenn seine eigene ISBN von
+  der angefragten abweicht.
+- ~~Filter-Chip-Zeile lief auf schmalen Screens aus dem Rahmen~~ —
+  gefixt 2026-09-25 (v0.12.1 erster Versuch unvollständig, v0.12.3
+  vollständiger Fix, beide direkt): `.lt-filter-chips` brauchte als
+  verschachtelter Flex-Container eine erzwungene `flex-basis: 100%`,
+  damit das eigene `flex-wrap` überhaupt greifen konnte.
 - ~~Duplikat-Erkennung beim Hinzufügen + Duplikate-Filter~~ — umgesetzt
   2026-09-25 via Jules-PR #24 (Issue #23, v0.12.0): Hinweis mit Abfrage
   ("trotzdem als zusätzliches Exemplar speichern?") statt automatischer
