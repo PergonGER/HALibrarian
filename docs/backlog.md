@@ -7,6 +7,17 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Cover-Nachladung fand fast nichts ("0 von über 100")~~ — gefixt
+  2026-09-29 (v0.14.1, direkter Fix, kein Jules-Issue): `async_find_
+  cover_url()` nutzte denselben strikten ISBN-Mismatch-Check wie die
+  volle Metadaten-Suche (`async_lookup_isbn`, siehe v0.12.2-Fix) — der
+  lehnt einen Google-Books-Treffer ab, wenn dessen eigene ISBN von der
+  angefragten abweicht. Für eine reine Cover-Suche zu streng: Bücher
+  ohne Cover sind überproportional genau die, deren gespeicherte ISBN
+  schon beim ursprünglichen Hinzufügen nicht sauber zu Googles Index
+  passte. `_async_query_google_books()` hat jetzt einen Parameter
+  `require_isbn_match` (Default weiterhin `True` für die volle
+  Metadaten-Suche), Cover-Suche ruft mit `False` auf.
 - ~~Fehlende Cover nachträglich für bestehende Bücher suchen~~ —
   umgesetzt 2026-09-29 via Jules-PR #30 (Issue #29, v0.14.0): Button in
   den Einstellungen, geht gedrosselt (0,3s Pause) durch alle Bücher ohne
@@ -117,6 +128,10 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Offen
 
+- **ISBN fehlt im Buch-Detail-Popup** (Nutzerwunsch 2026-09-29): Das
+  Detail-Popup (`_openBookDetailDialog`) zeigt aktuell Titel, Autor,
+  Status, Erscheinungsdatum und Bewertung, aber keine ISBN — wäre beim
+  Nachschlagen/Vergleichen nützlich. Nicht dringend ("bei Gelegenheit").
 - **Serien-seriesId-API-Einschränkung** (Ursprungs-Recherche vom
   2026-09-10, weiterhin relevant für Issue #12): kein Google-Books-API-
   Endpunkt, um nach allen Büchern einer `seriesId` zu suchen, keine
