@@ -19,6 +19,7 @@ from custom_components.library_tracker.websocket_api import (
     ws_authors_set_favorite,
     ws_authors_set_rating,
     ws_books_add,
+    ws_books_backfill_covers,
     ws_books_check_duplicates,
     ws_books_delete,
     ws_books_list,
@@ -56,7 +57,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 14
+        assert mock_register.call_count == 15
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -590,3 +591,103 @@ async def test_ws_books_ai_series_lookup_not_found_and_error(
 
     conn.send_error.assert_called_once()
     assert conn.send_error.call_args[0][1] == "ai_task_error"
+
+
+@pytest.mark.asyncio
+async def test_ws_books_backfill_covers(mock_hass: HomeAssistant) -> None:
+    """Test backfill_covers WebSocket command."""
+    conn = MagicMock()
+
+    # 1. Add book with ISBN and no cover (cover will be found)
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 1,
+            "type": "library_tracker/books/add",
+            "isbn": "9781111111111",
+            "title": "Book 1",
+            "author": "Author 1",
+            "status": "ungelesen",
+            "cover_url": "",
+        },
+    )
+    b1_id = conn.send_result.call_args[0][1]["id"]
+
+    # 2. Add book with ISBN and no cover (no cover found)
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 2,
+            "type": "library_tracker/books/add",
+            "isbn": "9782222222222",
+            "title": "Book 2",
+            "author": "Author 2",
+            "status": "ungelesen",
+            "cover_url": "",
+        },
+    )
+
+    # 3. Add book with empty ISBN and no cover (skipped)
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 3,
+            "type": "library_tracker/books/add",
+            "isbn": "",
+            "title": "Book 3",
+            "author": "Author 3",
+            "status": "ungelesen",
+            "cover_url": "",
+        },
+    )
+
+    # 4. Add book with existing cover (not processed)
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 4,
+            "type": "library_tracker/books/add",
+            "isbn": "9784444444444",
+            "title": "Book 4",
+            "author": "Author 4",
+            "status": "gelesen",
+            "cover_url": "https://example.com/existing.jpg",
+        },
+    )
+
+    async def mock_find_cover(hass, isbn, google_api_key=None):
+        if isbn == "9781111111111":
+            return "https://example.com/found_cover.jpg"
+        return None
+
+    conn.reset_mock()
+    with (
+        patch(
+            "custom_components.library_tracker.websocket_api.async_find_cover_url",
+            side_effect=mock_find_cover,
+        ),
+        patch("asyncio.sleep", AsyncMock()),
+    ):
+        await inspect.unwrap(ws_books_backfill_covers)(
+            mock_hass,
+            conn,
+            {"id": 10, "type": "library_tracker/books/backfill_covers"},
+        )
+
+    conn.send_result.assert_called_once_with(
+        10,
+        {
+            "checked": 2,
+            "updated": 1,
+            "skipped_no_isbn": 1,
+        },
+    )
+
+    # Verify Book 1 in DB has updated cover_url
+    db = mock_hass.data[DOMAIN]["db"]
+    updated_b1 = db.get_book(b1_id)
+    assert updated_b1["cover_url"] == "https://example.com/found_cover.jpg"

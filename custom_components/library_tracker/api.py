@@ -58,6 +58,61 @@ async def async_lookup_isbn(
     return None
 
 
+async def async_find_cover_url(
+    hass: HomeAssistant, isbn: str, google_api_key: str | None = None
+) -> str | None:
+    """Find cover URL for a given ISBN using Google Books, Open Library API, or direct Open Library cover endpoint.
+
+    Returns the cover URL if found, or None if no cover was found.
+    """
+    normalized_isbn = clean_isbn(isbn)
+    if not normalized_isbn:
+        _LOGGER.warning("Invalid or empty ISBN provided for cover search: %s", isbn)
+        return None
+
+    session = async_get_clientsession(hass)
+
+    # 1. Try Google Books API
+    google_result = await _async_query_google_books(
+        session, normalized_isbn, google_api_key
+    )
+    if google_result and google_result.get("cover_url"):
+        return google_result["cover_url"]
+
+    # 2. Try Open Library API
+    open_library_result = await _async_query_open_library(session, normalized_isbn)
+    if open_library_result and open_library_result.get("cover_url"):
+        return open_library_result["cover_url"]
+
+    # 3. Try direct Open Library Cover endpoint
+    direct_cover_url = (
+        f"https://covers.openlibrary.org/b/isbn/{normalized_isbn}-L.jpg?default=false"
+    )
+    try:
+        async with asyncio.timeout(REQUEST_TIMEOUT):
+            async with session.head(direct_cover_url) as response:
+                if response.status == 200:
+                    return direct_cover_url
+                _LOGGER.debug(
+                    "Direct Open Library cover endpoint returned status %s for ISBN %s",
+                    response.status,
+                    normalized_isbn,
+                )
+    except (ClientError, asyncio.TimeoutError) as err:
+        _LOGGER.debug(
+            "Error checking direct Open Library cover endpoint for ISBN %s: %s",
+            normalized_isbn,
+            err,
+        )
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception(
+            "Unexpected error checking direct Open Library cover endpoint for ISBN %s",
+            normalized_isbn,
+        )
+
+    return None
+
+
 def _parse_google_book_item(item: dict[str, Any]) -> dict[str, Any] | None:
     """Parse a single volume item from Google Books API response."""
     if not isinstance(item, dict):

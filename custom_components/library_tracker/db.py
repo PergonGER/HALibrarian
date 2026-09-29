@@ -199,6 +199,32 @@ class LibraryTrackerDatabase:
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
+    def get_books_without_cover(self) -> list[dict[str, Any]]:
+        """Retrieve all books where cover_url is NULL or empty string."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT
+                    b.id,
+                    b.isbn,
+                    b.title,
+                    b.author_id,
+                    a.name AS author,
+                    b.published_date,
+                    b.cover_url,
+                    b.status,
+                    b.rating,
+                    b.series_id,
+                    b.series_order
+                FROM Books b
+                JOIN Authors a ON b.author_id = a.id
+                WHERE b.cover_url IS NULL OR TRIM(b.cover_url) = ''
+                ORDER BY b.id DESC
+            """
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
     def get_books(self, status: str | None = None) -> list[dict[str, Any]]:
         """Retrieve all books, optionally filtered by status."""
         with self._get_connection() as conn:
