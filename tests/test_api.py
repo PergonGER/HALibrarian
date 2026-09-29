@@ -249,6 +249,53 @@ async def test_async_find_cover_url_google_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_find_cover_url_accepts_isbn_mismatch() -> None:
+    """A cover-only lookup must accept a Google Books hit even if the
+    item's own ISBN doesn't match the one we queried - unlike
+    async_lookup_isbn(), where the same mismatch is rejected to avoid
+    substituting a wrong book's title/author. Books still missing a cover
+    are disproportionately ones whose stored ISBN didn't cleanly match
+    Google's index in the first place, so a strict match here would keep
+    rejecting most of them again.
+    """
+    mock_hass = MagicMock()
+    mock_session = MagicMock()
+
+    mock_google_resp = AsyncMock()
+    mock_google_resp.status = 200
+    mock_google_resp.json = AsyncMock(
+        return_value={
+            "totalItems": 1,
+            "items": [
+                {
+                    "volumeInfo": {
+                        "title": "Das Profil",
+                        "authors": ["Hubertus Borck"],
+                        "imageLinks": {
+                            "thumbnail": "http://books.google.com/cover.jpg"
+                        },
+                        "industryIdentifiers": [
+                            {"type": "ISBN_13", "identifier": "9789999999999"}
+                        ],
+                    }
+                }
+            ],
+        }
+    )
+    cm = AsyncMock()
+    cm.__aenter__.return_value = mock_google_resp
+    mock_session.get.return_value = cm
+
+    with patch(
+        "custom_components.library_tracker.api.async_get_clientsession",
+        return_value=mock_session,
+    ):
+        cover = await async_find_cover_url(mock_hass, "9781234567897")
+
+    assert cover == "https://books.google.com/cover.jpg"
+
+
+@pytest.mark.asyncio
 async def test_async_find_cover_url_open_library_and_direct_fallback() -> None:
     """Test finding cover falling back to Open Library API and then direct endpoint."""
     mock_hass = MagicMock()
