@@ -341,6 +341,11 @@ class LibraryTrackerPanel extends HTMLElement {
               </select>
             </div>
 
+            <div class="lt-form__group" style="margin-top: 1.5rem; border-top: 1px solid var(--lt-border-color); padding-top: 1rem;">
+              <label>Cover-Nachladung</label>
+              <button type="button" id="btn-backfill-covers" class="lt-btn lt-btn--secondary">Fehlende Cover nachladen</button>
+            </div>
+
             <p class="lt-status-msg">Diese Einstellungen gelten nur für dieses Gerät/diesen Browser.</p>
 
             <div class="lt-form__actions">
@@ -1344,6 +1349,27 @@ class LibraryTrackerPanel extends HTMLElement {
         this.$("#settings-theme").value = "system";
         this.$("#settings-columns").value = "auto";
         this._showToast("Einstellungen zurückgesetzt.");
+      });
+    }
+
+    const btnBackfillCovers = this.$("#btn-backfill-covers");
+    if (btnBackfillCovers) {
+      btnBackfillCovers.addEventListener("click", async () => {
+        btnBackfillCovers.disabled = true;
+        this._showToast("Suche läuft …");
+        try {
+          const res = await this._hass.callWS({
+            type: "library_tracker/books/backfill_covers",
+          });
+          const totalFound = res ? (res.updated || 0) : 0;
+          const totalChecked = res ? (res.checked || 0) : 0;
+          this._showToast(`Für ${totalFound} von ${totalChecked} Büchern ein Cover gefunden.`);
+          this._loadBooks();
+        } catch (err) {
+          this._showToast("Fehler bei der Cover-Suche: " + (err.message || err), true);
+        } finally {
+          btnBackfillCovers.disabled = false;
+        }
       });
     }
 

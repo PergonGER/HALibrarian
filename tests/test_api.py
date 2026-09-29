@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from custom_components.library_tracker.api import (
+    async_find_cover_url,
     async_lookup_isbn,
     async_search_books_by_text,
     clean_isbn,
@@ -208,6 +209,127 @@ async def test_async_lookup_isbn_not_found() -> None:
         result = await async_lookup_isbn(mock_hass, "0000000000000")
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_async_find_cover_url_google_success() -> None:
+    """Test finding cover via Google Books API."""
+    mock_hass = MagicMock()
+    mock_session = MagicMock()
+
+    mock_google_resp = AsyncMock()
+    mock_google_resp.status = 200
+    mock_google_resp.json = AsyncMock(
+        return_value={
+            "totalItems": 1,
+            "items": [
+                {
+                    "volumeInfo": {
+                        "title": "Clean Code",
+                        "authors": ["Robert C. Martin"],
+                        "imageLinks": {
+                            "thumbnail": "http://books.google.com/books/cover.jpg"
+                        },
+                    }
+                }
+            ],
+        }
+    )
+    cm = AsyncMock()
+    cm.__aenter__.return_value = mock_google_resp
+    mock_session.get.return_value = cm
+
+    with patch(
+        "custom_components.library_tracker.api.async_get_clientsession",
+        return_value=mock_session,
+    ):
+        cover = await async_find_cover_url(mock_hass, "9780132350884")
+
+    assert cover == "https://books.google.com/books/cover.jpg"
+
+
+@pytest.mark.asyncio
+async def test_async_find_cover_url_open_library_and_direct_fallback() -> None:
+    """Test finding cover falling back to Open Library API and then direct endpoint."""
+    mock_hass = MagicMock()
+
+    # 1. Test Open Library API fallback
+    mock_session1 = MagicMock()
+    google_empty = AsyncMock()
+    google_empty.status = 200
+    google_empty.json = AsyncMock(return_value={"totalItems": 0})
+    google_cm = AsyncMock()
+    google_cm.__aenter__.return_value = google_empty
+
+    ol_resp = AsyncMock()
+    ol_resp.status = 200
+    ol_resp.json = AsyncMock(
+        return_value={
+            "ISBN:9780132350884": {
+                "title": "Clean Code",
+                "cover": {"large": "https://covers.openlibrary.org/b/id/123-L.jpg"},
+            }
+        }
+    )
+    ol_cm = AsyncMock()
+    ol_cm.__aenter__.return_value = ol_resp
+    mock_session1.get.side_effect = [google_cm, ol_cm]
+
+    with patch(
+        "custom_components.library_tracker.api.async_get_clientsession",
+        return_value=mock_session1,
+    ):
+        cover = await async_find_cover_url(mock_hass, "9780132350884")
+    assert cover == "https://covers.openlibrary.org/b/id/123-L.jpg"
+
+    # 2. Test direct HEAD endpoint fallback
+    mock_session2 = MagicMock()
+    ol_empty = AsyncMock()
+    ol_empty.status = 200
+    ol_empty.json = AsyncMock(return_value={})
+    ol_empty_cm = AsyncMock()
+    ol_empty_cm.__aenter__.return_value = ol_empty
+    mock_session2.get.side_effect = [google_cm, ol_empty_cm]
+
+    head_resp = AsyncMock()
+    head_resp.status = 200
+    head_cm = AsyncMock()
+    head_cm.__aenter__.return_value = head_resp
+    mock_session2.head.return_value = head_cm
+
+    with patch(
+        "custom_components.library_tracker.api.async_get_clientsession",
+        return_value=mock_session2,
+    ):
+        cover_direct = await async_find_cover_url(mock_hass, "9780132350884")
+    assert (
+        cover_direct
+        == "https://covers.openlibrary.org/b/isbn/9780132350884-L.jpg?default=false"
+    )
+
+    # 3. Test direct HEAD endpoint returning 404 (None returned)
+    mock_session3 = MagicMock()
+    mock_session3.get.side_effect = [google_cm, ol_empty_cm]
+    head_404 = AsyncMock()
+    head_404.status = 404
+    head_404_cm = AsyncMock()
+    head_404_cm.__aenter__.return_value = head_404
+    mock_session3.head.return_value = head_404_cm
+
+    with patch(
+        "custom_components.library_tracker.api.async_get_clientsession",
+        return_value=mock_session3,
+    ):
+        cover_none = await async_find_cover_url(mock_hass, "9780132350884")
+    assert cover_none is None
+
+
+@pytest.mark.asyncio
+async def test_async_find_cover_url_invalid_isbn() -> None:
+    """Test async_find_cover_url with invalid or empty ISBN."""
+    mock_hass = MagicMock()
+    res = await async_find_cover_url(mock_hass, "  -  ")
+    assert res is None
 
 
 @pytest.mark.asyncio

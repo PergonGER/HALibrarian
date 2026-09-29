@@ -114,6 +114,25 @@ def test_get_books_by_series(db: LibraryTrackerDatabase) -> None:
     assert [b["id"] for b in filtered_series] == [book1["id"], book3["id"]]
 
 
+def test_get_books_without_cover(db: LibraryTrackerDatabase) -> None:
+    """Test retrieving books that have no cover_url set or empty."""
+    book1 = db.add_book(
+        isbn="111", title="Book With Cover", author_name="Author A", status="gelesen", cover_url="https://example.com/c.jpg"
+    )
+    book2 = db.add_book(
+        isbn="222", title="Book Without Cover 1", author_name="Author B", status="ungelesen", cover_url=None
+    )
+    book3 = db.add_book(
+        isbn="333", title="Book Without Cover 2", author_name="Author C", status="wunschliste", cover_url="   "
+    )
+
+    no_covers = db.get_books_without_cover()
+    assert len(no_covers) == 2
+    no_cover_ids = {b["id"] for b in no_covers}
+    assert no_cover_ids == {book2["id"], book3["id"]}
+    assert book1["id"] not in no_cover_ids
+
+
 def test_get_books_status_filter(db: LibraryTrackerDatabase) -> None:
     """Test filtering books by status."""
     db.add_book(

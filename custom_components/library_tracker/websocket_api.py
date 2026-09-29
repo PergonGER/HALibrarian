@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from functools import partial
 import logging
 from typing import Any
 
@@ -15,6 +17,7 @@ from homeassistant.loader import async_get_integration
 
 from .api import (
     async_ai_lookup_series,
+    async_find_cover_url,
     async_lookup_isbn,
     async_search_books_by_text,
 )
@@ -441,6 +444,57 @@ async def ws_books_ai_series_lookup(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "library_tracker/books/backfill_covers",
+    }
+)
+@websocket_api.async_response
+async def ws_books_backfill_covers(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Find and set missing cover URLs for existing books without covers."""
+    try:
+        db = _get_db(hass)
+        api_key = _get_google_api_key(hass)
+        books_without_cover = await hass.async_add_executor_job(
+            db.get_books_without_cover
+        )
+
+        checked = 0
+        updated = 0
+        skipped_no_isbn = 0
+
+        for i, book in enumerate(books_without_cover):
+            isbn = (book.get("isbn") or "").strip()
+            if not isbn:
+                skipped_no_isbn += 1
+                continue
+
+            if i > 0:
+                await asyncio.sleep(0.3)
+
+            checked += 1
+            cover_url = await async_find_cover_url(hass, isbn, google_api_key=api_key)
+            if cover_url:
+                await hass.async_add_executor_job(
+                    partial(db.update_book, book["id"], cover_url=cover_url)
+                )
+                updated += 1
+
+        connection.send_result(
+            msg["id"],
+            {
+                "checked": checked,
+                "updated": updated,
+                "skipped_no_isbn": skipped_no_isbn,
+            },
+        )
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/books/backfill_covers: %s", err)
+        connection.send_error(msg["id"], "api_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "library_tracker/version",
     }
 )
@@ -479,6 +533,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_lookup_isbn)
     websocket_api.async_register_command(hass, ws_books_search_text)
     websocket_api.async_register_command(hass, ws_books_ai_series_lookup)
+    websocket_api.async_register_command(hass, ws_books_backfill_covers)
     websocket_api.async_register_command(hass, ws_version)
 
     hass.data.setdefault(DOMAIN, {})["ws_commands_registered"] = True
