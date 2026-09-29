@@ -341,7 +341,7 @@ class LibraryTrackerPanel extends HTMLElement {
               </select>
             </div>
 
-            <div class="lt-form__group" style="margin-top: 1.5rem; border-top: 1px solid var(--lt-border-color); padding-top: 1rem;">
+            <div class="lt-form__group" style="margin-top: 1.5rem; border-top: 1px solid var(--lt-divider); padding-top: 1rem;">
               <label>Cover-Nachladung</label>
               <button type="button" id="btn-backfill-covers" class="lt-btn lt-btn--secondary">Fehlende Cover nachladen</button>
             </div>
