@@ -7,6 +7,16 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Fehlende Cover nachträglich für bestehende Bücher suchen~~ —
+  umgesetzt 2026-09-29 via Jules-PR #30 (Issue #29, v0.14.0): Button in
+  den Einstellungen, geht gedrosselt (0,3s Pause) durch alle Bücher ohne
+  Cover, Fallback-Kette Google Books → Open Library → Open Librarys
+  direkter Cover-Endpunkt (`?default=false`, HEAD-Request). Bücher ohne
+  ISBN werden übersprungen. Bewusst **kein** `ai_task`/Gemini-Einsatz
+  (Nutzer-Entscheidung: zu hohes Risiko erfundener/toter Bild-URLs).
+  Kleiner Fund beim Review, direkt selbst gefixt: neuer Button nutzte
+  eine nirgends definierte CSS-Variable (`--lt-border-color` statt
+  `--lt-divider`).
 - ~~"+Buch hinzufügen"-Button entfernt, Freitextsuche ins
   ISBN-Scanner-Feld integriert~~ — umgesetzt 2026-09-25 via Jules-PR #28
   (Issue #27, v0.13.0): Ein Eingabefeld im ISBN-Scanner-Tab für ISBN
