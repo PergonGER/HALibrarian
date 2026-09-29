@@ -678,12 +678,33 @@ async def test_ws_books_backfill_covers(mock_hass: HomeAssistant) -> None:
             {"id": 10, "type": "library_tracker/books/backfill_covers"},
         )
 
-    conn.send_result.assert_called_once_with(
+    # Subscription start confirmed
+    conn.send_result.assert_called_once_with(10)
+
+    # Events sent: 3 progress events + 1 final done event
+    assert conn.send_event.call_count == 4
+
+    # Check progress events (Books without cover are processed in ID DESC order: Book 3, Book 2, Book 1)
+    conn.send_event.assert_any_call(
+        10, {"checked": 0, "total": 3, "updated": 0, "done": False}
+    )
+    conn.send_event.assert_any_call(
+        10, {"checked": 1, "total": 3, "updated": 0, "done": False}
+    )
+    conn.send_event.assert_any_call(
+        10, {"checked": 2, "total": 3, "updated": 1, "done": False}
+    )
+
+    # Final event
+    final_event = conn.send_event.call_args_list[-1][0]
+    assert final_event == (
         10,
         {
             "checked": 2,
+            "total": 3,
             "updated": 1,
             "skipped_no_isbn": 1,
+            "done": True,
         },
     )
 
@@ -691,3 +712,27 @@ async def test_ws_books_backfill_covers(mock_hass: HomeAssistant) -> None:
     db = mock_hass.data[DOMAIN]["db"]
     updated_b1 = db.get_book(b1_id)
     assert updated_b1["cover_url"] == "https://example.com/found_cover.jpg"
+
+
+@pytest.mark.asyncio
+async def test_ws_books_backfill_covers_empty(mock_hass: HomeAssistant) -> None:
+    """Test backfill_covers WebSocket command when no books need covers."""
+    conn = MagicMock()
+
+    await inspect.unwrap(ws_books_backfill_covers)(
+        mock_hass,
+        conn,
+        {"id": 11, "type": "library_tracker/books/backfill_covers"},
+    )
+
+    conn.send_result.assert_called_once_with(11)
+    conn.send_event.assert_called_once_with(
+        11,
+        {
+            "checked": 0,
+            "total": 0,
+            "updated": 0,
+            "skipped_no_isbn": 0,
+            "done": True,
+        },
+    )
