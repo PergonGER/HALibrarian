@@ -128,6 +128,15 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Offen
 
+- **Bücherliste alphabetisch sortierbar** (Nutzerwunsch 2026-09-29):
+  Die Hauptliste im Bücher-Tab ist aktuell fest nach `id DESC` sortiert
+  (neueste zuerst, `db.get_books()`/`get_duplicate_books()`/
+  `get_books_by_series()` in `db.py`, `ORDER BY b.id DESC`). Gewünscht:
+  Sortierung alphabetisch nach Titel als Option. Noch zu klären vor
+  einem Issue-Zuschnitt: feste Umstellung vs. Sortier-Umschalter (z. B.
+  Chip/Dropdown neben den Filtern) mit mehreren Optionen (Titel, Autor,
+  Erscheinungsdatum, hinzugefügt), und ob das nur die Bücherliste
+  betrifft oder auch Autorenliste/Duplikate-/Serien-Ansicht.
 - **ISBN fehlt im Buch-Detail-Popup** (Nutzerwunsch 2026-09-29): Das
   Detail-Popup (`_openBookDetailDialog`) zeigt aktuell Titel, Autor,
   Status, Erscheinungsdatum und Bewertung, aber keine ISBN — wäre beim
