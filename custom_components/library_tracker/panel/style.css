@@ -333,13 +333,21 @@ body {
 }
 
 .lt-book-card {
-  /* Reset <button> defaults (border/font/text-align/width) - it's a real
-     button now for reliable click handling on Android WebView, see
-     _renderBooks(). */
+  /* Reset <button> defaults (border/font/text-align/width/color) - it's
+     a real button now for reliable click handling on Android WebView,
+     see _renderBooks(). color is the easy one to miss here: unlike a
+     <div>, a <button> does not reliably inherit the page's text color -
+     some browsers give native form controls their own dark-mode-aware
+     default text color, independent of the page's own color scheme.
+     Confirmed via DevTools: .lt-book-card__title (which sets no color
+     of its own) computed to white-on-white and was invisible, while
+     .lt-book-card__author (which does set its own color) rendered
+     fine. */
   border: none;
   font: inherit;
   text-align: left;
   width: 100%;
+  color: var(--lt-text-primary);
   background: var(--lt-card-bg);
   border-radius: var(--lt-radius-lg);
   box-shadow: var(--lt-shadow);
