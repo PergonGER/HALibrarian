@@ -7,6 +7,16 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Cover-Nachladung wirkte wie gehängt, fand weiterhin kaum Cover~~ —
+  gefixt 2026-10-01 (v0.14.2, direkter Fix via Debug-Logs des Nutzers
+  diagnostiziert, kein Jules-Issue): `session.head()` an den direkten
+  Open-Library-Cover-Endpunkt folgte Redirects nicht (`aiohttp`s `.head()`
+  hat `allow_redirects=False` als Default, anders als `.get()`) — ein
+  302 (Cover existiert, Redirect zum Bild) wurde fälschlich als "kein
+  Cover" gewertet. Fix: `allow_redirects=True` explizit gesetzt. Kein
+  echter Hänger: laut Log-Zeitstempeln ~1,3s pro Buch, bei ~300 Büchern
+  realistisch mehrere Minuten ohne sichtbaren Fortschritt (Issue #31
+  dazu weiterhin offen).
 - ~~Cover-Nachladung fand fast nichts ("0 von über 100")~~ — gefixt
   2026-09-29 (v0.14.1, direkter Fix, kein Jules-Issue): `async_find_
   cover_url()` nutzte denselben strikten ISBN-Mismatch-Check wie die
