@@ -7,6 +7,17 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Google Books 503 während Cover-Nachladung führte sofort zum
+  Fallback~~ — gefixt 2026-10-01 (v0.14.4, direkter Fix via Debug-Logs
+  diagnostiziert): Nutzer hatte bereits einen Google-Books-API-Key
+  hinterlegt (per Code-Review bestätigt korrekt eingebunden), trotzdem
+  wiederholt `status 503` in den Logs — Googles Kurzzeit-Burst-Limit ist
+  unabhängig vom Tageskontingent eines Keys und kann beim schnellen
+  Durchlauf vieler Bücher trotzdem greifen. Fix: bis zu zwei kurze
+  Wiederholungsversuche bei 503/429 direkt in
+  `_async_query_google_books`, bevor auf Open Library zurückgefallen
+  wird; andere Status-Codes (z. B. 404) lösen weiterhin sofort wie
+  bisher den Fallback aus.
 - ~~Buchtitel in der Kartenansicht unsichtbar~~ — gefixt 2026-10-01
   (v0.14.3, direkter Fix, kein Jules-Issue): per DevTools-Hilfe des
   Nutzers diagnostiziert — `computed color` von `.lt-book-card__title`
@@ -152,6 +163,15 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Offen
 
+- **Browser-Fehler "CustomElementRegistry: name already used"**
+  (beiläufig in Debug-Logs vom 2026-10-01 entdeckt, nicht weiter
+  untersucht): `frontend.js` meldete einmalig `Error: Failed to execute
+  'define' on 'CustomElementRegistry': the name "library-tracker-panel"
+  has already been used with this registry` — deutet darauf hin, dass
+  das Panel-Modul im selben Browser/Tab mehrfach registriert wurde (z. B.
+  durch zwei offene Tabs oder ein erneutes Laden ohne vollen Seiten-
+  Reload). Kein bekannter funktionaler Schaden bisher beobachtet, aber
+  noch nicht root-caused.
 - **Bücherliste alphabetisch sortierbar** (Nutzerwunsch 2026-09-29):
   Die Hauptliste im Bücher-Tab ist aktuell fest nach `id DESC` sortiert
   (neueste zuerst, `db.get_books()`/`get_duplicate_books()`/
