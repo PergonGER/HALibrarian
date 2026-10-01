@@ -7,6 +7,20 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Buchtitel in der Kartenansicht unsichtbar~~ — gefixt 2026-10-01
+  (v0.14.3, direkter Fix, kein Jules-Issue): per DevTools-Hilfe des
+  Nutzers diagnostiziert — `computed color` von `.lt-book-card__title`
+  war `rgb(255, 255, 255)` (weiß auf weißer Karte). `.lt-book-card` ist
+  seit der Android-Klick-Fix-Umstellung (v0.10.2) ein `<button>`, der
+  Reset dort hat nie eine eigene `color` gesetzt — Browser geben nativen
+  Formularelementen bei OS-Dunkelmodus teils eine eigene, vom restlichen
+  Seiten-Farbschema unabhängige Standard-Textfarbe, unabhängig von
+  `prefers-color-scheme` der Seite selbst. Der Autor-Text blieb
+  unberührt (eigene `color` gesetzt), daher fiel nur der Titel weg.
+  Reproduktion in isoliertem Playwright-Test zeigte zunächst
+  unauffälliges Schwarz — das eigentliche Verhalten ließ sich nur über
+  die DevTools des Nutzers (PC **und** Handy betroffen) zweifelsfrei
+  bestätigen. Fix: `color: var(--lt-text-primary)` explizit gesetzt.
 - ~~Cover-Nachladung wirkte wie gehängt, fand weiterhin kaum Cover~~ —
   gefixt 2026-10-01 (v0.14.2, direkter Fix via Debug-Logs des Nutzers
   diagnostiziert, kein Jules-Issue): `session.head()` an den direkten
