@@ -907,6 +907,12 @@ select:focus {
   color: var(--lt-text-secondary);
 }
 
+.lt-book-detail__isbn {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: var(--lt-text-secondary);
+}
+
 .lt-book-detail__rating {
   display: flex;
   align-items: center;

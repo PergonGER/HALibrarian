@@ -196,6 +196,7 @@ class LibraryTrackerPanel extends HTMLElement {
                 <span id="detail-status" class="lt-badge"></span>
                 <span id="detail-published-date"></span>
               </div>
+              <p id="detail-isbn" class="lt-book-detail__isbn"></p>
               <div id="detail-series-container"></div>
               <div class="lt-book-detail__rating">
                 <span class="lt-book-detail__label">Bewertung:</span>
@@ -812,6 +813,11 @@ class LibraryTrackerPanel extends HTMLElement {
     const pubDateEl = this.$("#detail-published-date");
     if (pubDateEl) {
       pubDateEl.textContent = book.published_date ? ` • ${book.published_date}` : "";
+    }
+
+    const isbnEl = this.$("#detail-isbn");
+    if (isbnEl) {
+      isbnEl.textContent = book.isbn ? `ISBN: ${book.isbn}` : "";
     }
 
     const seriesContainer = this.$("#detail-series-container");
