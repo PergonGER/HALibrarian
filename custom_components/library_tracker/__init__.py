@@ -15,6 +15,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
 from .const import (
+    COVERS_DIR_NAME,
+    COVERS_URL_BASE,
     DB_FILENAME,
     DOMAIN,
     PANEL_ICON,
@@ -43,6 +45,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await hass.async_add_executor_job(db.init_db)
         domain_data["db"] = db
 
+    # Ensure covers directory exists and register static path
+    covers_dir = Path(hass.config.path(COVERS_DIR_NAME))
+    await hass.async_add_executor_job(lambda: covers_dir.mkdir(parents=True, exist_ok=True))
+    if not domain_data.get("covers_registered"):
+        await hass.http.async_register_static_paths(
+            [
+                StaticPathConfig(
+                    COVERS_URL_BASE,
+                    str(covers_dir),
+                    cache_headers=False,
+                )
+            ]
+        )
+        domain_data["covers_registered"] = True
+
     domain_data[entry.entry_id] = {"entry": entry}
 
     # Register WebSocket commands
@@ -63,7 +80,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Only clean up panel and database reference once no config entries are left.
     remaining_entries = [
-        k for k in domain_data.keys() if k not in ("db", "panel_registered", "ws_commands_registered")
+        k
+        for k in domain_data.keys()
+        if k not in ("db", "panel_registered", "ws_commands_registered", "covers_registered")
     ]
     if not remaining_entries:
         frontend.async_remove_panel(hass, PANEL_URL_PATH)

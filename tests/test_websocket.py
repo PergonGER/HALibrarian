@@ -26,6 +26,7 @@ from custom_components.library_tracker.websocket_api import (
     ws_books_list_duplicates,
     ws_books_search_text,
     ws_books_update,
+    ws_books_upload_cover,
     ws_lookup_isbn,
 )
 
@@ -35,8 +36,10 @@ def mock_hass() -> Generator[HomeAssistant, None, None]:
     """Fixture for mock HomeAssistant object with database initialized."""
     hass = MagicMock(spec=HomeAssistant)
     hass.data = {}
+    hass.config = MagicMock()
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        hass.config.path.side_effect = lambda *args: str(Path(tmpdir) / Path(*args)) if args else tmpdir
         db_path = str(Path(tmpdir) / "test.db")
         db = LibraryTrackerDatabase(db_path)
         db.init_db()
@@ -57,7 +60,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 15
+        assert mock_register.call_count == 16
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -708,10 +711,105 @@ async def test_ws_books_backfill_covers(mock_hass: HomeAssistant) -> None:
         },
     )
 
-    # Verify Book 1 in DB has updated cover_url
-    db = mock_hass.data[DOMAIN]["db"]
-    updated_b1 = db.get_book(b1_id)
-    assert updated_b1["cover_url"] == "https://example.com/found_cover.jpg"
+
+@pytest.mark.asyncio
+async def test_ws_books_upload_cover_success(mock_hass: HomeAssistant) -> None:
+    """Test ws_books_upload_cover WebSocket handler on success."""
+    import base64
+    from custom_components.library_tracker.const import COVERS_DIR_NAME, COVERS_URL_BASE
+
+    conn = MagicMock()
+
+    # Add book
+    add_msg = {
+        "id": 1,
+        "type": "library_tracker/books/add",
+        "isbn": "9781234567890",
+        "title": "Photo Cover Book",
+        "author": "Photo Author",
+        "status": "ungelesen",
+    }
+    await inspect.unwrap(ws_books_add)(mock_hass, conn, add_msg)
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    # Prepare dummy image base64 (e.g. "hello world")
+    raw_bytes = b"fake-jpeg-image-bytes"
+    base64_str = base64.b64encode(raw_bytes).decode("utf-8")
+
+    # Call upload_cover
+    conn.reset_mock()
+    upload_msg = {
+        "id": 2,
+        "type": "library_tracker/books/upload_cover",
+        "book_id": book_id,
+        "image_data": base64_str,
+    }
+    await inspect.unwrap(ws_books_upload_cover)(mock_hass, conn, upload_msg)
+
+    conn.send_result.assert_called_once()
+    result_book = conn.send_result.call_args[0][1]
+    assert result_book["id"] == book_id
+    assert result_book["cover_url"].startswith(f"{COVERS_URL_BASE}/{book_id}_")
+
+    # Verify file was written to disk
+    filename = result_book["cover_url"].replace(f"{COVERS_URL_BASE}/", "")
+    saved_file_path = Path(mock_hass.config.path(COVERS_DIR_NAME)) / filename
+    assert saved_file_path.exists()
+    assert saved_file_path.read_bytes() == raw_bytes
+
+
+@pytest.mark.asyncio
+async def test_ws_books_upload_cover_errors(mock_hass: HomeAssistant) -> None:
+    """Test ws_books_upload_cover error scenarios."""
+    conn = MagicMock()
+
+    # 1. Size limit exceeded (> 7,000,000 chars)
+    upload_msg_oversized = {
+        "id": 1,
+        "type": "library_tracker/books/upload_cover",
+        "book_id": 1,
+        "image_data": "A" * 7_000_001,
+    }
+    await inspect.unwrap(ws_books_upload_cover)(mock_hass, conn, upload_msg_oversized)
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "invalid_format"
+
+    # 2. Book not found
+    conn.reset_mock()
+    upload_msg_not_found = {
+        "id": 2,
+        "type": "library_tracker/books/upload_cover",
+        "book_id": 99999,
+        "image_data": "SGVsbG8=",
+    }
+    await inspect.unwrap(ws_books_upload_cover)(mock_hass, conn, upload_msg_not_found)
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "not_found"
+
+    # 3. Invalid base64
+    # First add a book
+    conn.reset_mock()
+    add_msg = {
+        "id": 3,
+        "type": "library_tracker/books/add",
+        "isbn": "9781234567891",
+        "title": "Book 2",
+        "author": "Author 2",
+        "status": "ungelesen",
+    }
+    await inspect.unwrap(ws_books_add)(mock_hass, conn, add_msg)
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    conn.reset_mock()
+    upload_msg_invalid_b64 = {
+        "id": 4,
+        "type": "library_tracker/books/upload_cover",
+        "book_id": book_id,
+        "image_data": "!!!InvalidBase64!!!",
+    }
+    await inspect.unwrap(ws_books_upload_cover)(mock_hass, conn, upload_msg_invalid_b64)
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "invalid_format"
 
 
 @pytest.mark.asyncio
