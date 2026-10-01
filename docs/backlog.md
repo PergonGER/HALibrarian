@@ -7,6 +7,17 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Live-Fortschritt bei "Fehlende Cover nachladen"~~ — umgesetzt
+  2026-10-01 via Jules-PR #32 (Issue #31, v0.14.6): Button zeigt während
+  des Laufs laufend "X von Y geprüft …" statt nur Start-/End-Toast.
+  `ws_books_backfill_covers` auf HAs WebSocket-Subscription-Pattern
+  umgestellt (`connection.send_event`/`hass.connection.subscribeMessage`
+  — von Jules korrekt gegen die echte HA-API verifiziert, nicht nur die
+  in Issue #31 genannte unverifizierte Annahme übernommen). PR hatte
+  Merge-Konflikt (Basis vor fünf Zwischenfixes), direkt aufgelöst
+  (0.14.6) — beide Änderungssätze (Live-Fortschritt + mein
+  ISBN-Popup-Fix) blieben beim automatischen Merge von
+  `library-tracker-panel.js` sauber erhalten.
 - ~~ISBN fehlt im Buch-Detail-Popup~~ — umgesetzt 2026-10-01 (v0.14.5,
   direkter Fix): einzeilige Ergänzung (`#detail-isbn`) unter dem
   Status/Datum-Block im Detail-Popup, nur sichtbar wenn eine ISBN
