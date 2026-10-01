@@ -72,9 +72,16 @@ async def async_find_cover_url(
 
     session = async_get_clientsession(hass)
 
-    # 1. Try Google Books API
+    # 1. Try Google Books API. require_isbn_match=False: a cover for a
+    # slightly different edition/ISBN of the same book is still a usable
+    # cover, unlike for async_lookup_isbn() where a mismatch could
+    # silently substitute a wrong book's title/author - and books that
+    # still have no cover here are disproportionately ones whose stored
+    # ISBN didn't cleanly match Google's index in the first place (that's
+    # why the original add-time lookup didn't get a cover), so the strict
+    # match would reject most of them again here.
     google_result = await _async_query_google_books(
-        session, normalized_isbn, google_api_key
+        session, normalized_isbn, google_api_key, require_isbn_match=False
     )
     if google_result and google_result.get("cover_url"):
         return google_result["cover_url"]
@@ -90,7 +97,17 @@ async def async_find_cover_url(
     )
     try:
         async with asyncio.timeout(REQUEST_TIMEOUT):
-            async with session.head(direct_cover_url) as response:
+            # allow_redirects=True: aiohttp's .head() defaults to NOT
+            # following redirects (unlike .get()) - Open Library's cover
+            # endpoint routinely 302-redirects a HEAD request to the
+            # actual image when a cover exists, which was being
+            # misread as "no cover" (confirmed via debug logs showing
+            # "status 302" for books that do have a cover on Open
+            # Library). Without this, nearly every real cover behind a
+            # redirect was silently discarded.
+            async with session.head(
+                direct_cover_url, allow_redirects=True
+            ) as response:
                 if response.status == 200:
                     return direct_cover_url
                 _LOGGER.debug(
@@ -241,24 +258,51 @@ async def async_search_books_by_text(
 
 
 async def _async_query_google_books(
-    session: Any, isbn: str, api_key: str | None
+    session: Any, isbn: str, api_key: str | None, require_isbn_match: bool = True
 ) -> dict[str, Any] | None:
-    """Query Google Books API for metadata."""
+    """Query Google Books API for metadata.
+
+    require_isbn_match=False skips the ISBN-mismatch rejection below (used
+    by the cover-only backfill lookup, where a hit for a slightly
+    different edition of the same book is an acceptable cover, unlike for
+    a full metadata lookup where it could silently substitute the wrong
+    book's title/author).
+    """
     url = f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}"
     if api_key:
         url += f"&key={api_key}"
 
     try:
-        async with asyncio.timeout(REQUEST_TIMEOUT):
-            async with session.get(url) as response:
-                if response.status != 200:
+        # 503/429 are Google's transient "temporarily overloaded/rate
+        # limited" responses, observed in practice during the cover
+        # backfill's rapid sequential requests even with an API key
+        # configured (the per-100-seconds burst limit is independent of
+        # the daily quota a key raises). A couple of short retries clears
+        # most of these; any other non-200 status is treated as a real
+        # "no match" straight away, not retried.
+        data = None
+        for attempt in range(3):
+            async with asyncio.timeout(REQUEST_TIMEOUT):
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        break
+                    if response.status in (503, 429) and attempt < 2:
+                        _LOGGER.debug(
+                            "Google Books API returned status %s for ISBN "
+                            "%s - retrying (attempt %s/3)",
+                            response.status,
+                            isbn,
+                            attempt + 1,
+                        )
+                        await asyncio.sleep(1 * (attempt + 1))
+                        continue
                     _LOGGER.debug(
                         "Google Books API returned status %s for ISBN %s",
                         response.status,
                         isbn,
                     )
                     return None
-                data = await response.json()
 
         total_items = data.get("totalItems", 0)
         items = data.get("items", [])
@@ -278,7 +322,7 @@ async def _async_query_google_books(
         # reliable match so the caller falls back to Open Library instead
         # of silently substituting the wrong book.
         returned_isbn = parsed["isbn"]
-        if returned_isbn and returned_isbn != isbn:
+        if require_isbn_match and returned_isbn and returned_isbn != isbn:
             _LOGGER.info(
                 "Google Books item for query ISBN %s reports ISBN %s - "
                 "mismatch, discarding as unreliable match.",

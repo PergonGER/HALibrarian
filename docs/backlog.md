@@ -7,6 +7,56 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~ISBN fehlt im Buch-Detail-Popup~~ — umgesetzt 2026-10-01 (v0.14.5,
+  direkter Fix): einzeilige Ergänzung (`#detail-isbn`) unter dem
+  Status/Datum-Block im Detail-Popup, nur sichtbar wenn eine ISBN
+  vorhanden ist.
+- ~~Google Books 503 während Cover-Nachladung führte sofort zum
+  Fallback~~ — gefixt 2026-10-01 (v0.14.4, direkter Fix via Debug-Logs
+  diagnostiziert): Nutzer hatte bereits einen Google-Books-API-Key
+  hinterlegt (per Code-Review bestätigt korrekt eingebunden), trotzdem
+  wiederholt `status 503` in den Logs — Googles Kurzzeit-Burst-Limit ist
+  unabhängig vom Tageskontingent eines Keys und kann beim schnellen
+  Durchlauf vieler Bücher trotzdem greifen. Fix: bis zu zwei kurze
+  Wiederholungsversuche bei 503/429 direkt in
+  `_async_query_google_books`, bevor auf Open Library zurückgefallen
+  wird; andere Status-Codes (z. B. 404) lösen weiterhin sofort wie
+  bisher den Fallback aus.
+- ~~Buchtitel in der Kartenansicht unsichtbar~~ — gefixt 2026-10-01
+  (v0.14.3, direkter Fix, kein Jules-Issue): per DevTools-Hilfe des
+  Nutzers diagnostiziert — `computed color` von `.lt-book-card__title`
+  war `rgb(255, 255, 255)` (weiß auf weißer Karte). `.lt-book-card` ist
+  seit der Android-Klick-Fix-Umstellung (v0.10.2) ein `<button>`, der
+  Reset dort hat nie eine eigene `color` gesetzt — Browser geben nativen
+  Formularelementen bei OS-Dunkelmodus teils eine eigene, vom restlichen
+  Seiten-Farbschema unabhängige Standard-Textfarbe, unabhängig von
+  `prefers-color-scheme` der Seite selbst. Der Autor-Text blieb
+  unberührt (eigene `color` gesetzt), daher fiel nur der Titel weg.
+  Reproduktion in isoliertem Playwright-Test zeigte zunächst
+  unauffälliges Schwarz — das eigentliche Verhalten ließ sich nur über
+  die DevTools des Nutzers (PC **und** Handy betroffen) zweifelsfrei
+  bestätigen. Fix: `color: var(--lt-text-primary)` explizit gesetzt.
+- ~~Cover-Nachladung wirkte wie gehängt, fand weiterhin kaum Cover~~ —
+  gefixt 2026-10-01 (v0.14.2, direkter Fix via Debug-Logs des Nutzers
+  diagnostiziert, kein Jules-Issue): `session.head()` an den direkten
+  Open-Library-Cover-Endpunkt folgte Redirects nicht (`aiohttp`s `.head()`
+  hat `allow_redirects=False` als Default, anders als `.get()`) — ein
+  302 (Cover existiert, Redirect zum Bild) wurde fälschlich als "kein
+  Cover" gewertet. Fix: `allow_redirects=True` explizit gesetzt. Kein
+  echter Hänger: laut Log-Zeitstempeln ~1,3s pro Buch, bei ~300 Büchern
+  realistisch mehrere Minuten ohne sichtbaren Fortschritt (Issue #31
+  dazu weiterhin offen).
+- ~~Cover-Nachladung fand fast nichts ("0 von über 100")~~ — gefixt
+  2026-09-29 (v0.14.1, direkter Fix, kein Jules-Issue): `async_find_
+  cover_url()` nutzte denselben strikten ISBN-Mismatch-Check wie die
+  volle Metadaten-Suche (`async_lookup_isbn`, siehe v0.12.2-Fix) — der
+  lehnt einen Google-Books-Treffer ab, wenn dessen eigene ISBN von der
+  angefragten abweicht. Für eine reine Cover-Suche zu streng: Bücher
+  ohne Cover sind überproportional genau die, deren gespeicherte ISBN
+  schon beim ursprünglichen Hinzufügen nicht sauber zu Googles Index
+  passte. `_async_query_google_books()` hat jetzt einen Parameter
+  `require_isbn_match` (Default weiterhin `True` für die volle
+  Metadaten-Suche), Cover-Suche ruft mit `False` auf.
 - ~~Fehlende Cover nachträglich für bestehende Bücher suchen~~ —
   umgesetzt 2026-09-29 via Jules-PR #30 (Issue #29, v0.14.0): Button in
   den Einstellungen, geht gedrosselt (0,3s Pause) durch alle Bücher ohne
@@ -117,6 +167,24 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Offen
 
+- **Browser-Fehler "CustomElementRegistry: name already used"**
+  (beiläufig in Debug-Logs vom 2026-10-01 entdeckt, nicht weiter
+  untersucht): `frontend.js` meldete einmalig `Error: Failed to execute
+  'define' on 'CustomElementRegistry': the name "library-tracker-panel"
+  has already been used with this registry` — deutet darauf hin, dass
+  das Panel-Modul im selben Browser/Tab mehrfach registriert wurde (z. B.
+  durch zwei offene Tabs oder ein erneutes Laden ohne vollen Seiten-
+  Reload). Kein bekannter funktionaler Schaden bisher beobachtet, aber
+  noch nicht root-caused.
+- **Bücherliste alphabetisch sortierbar** (Nutzerwunsch 2026-09-29):
+  Die Hauptliste im Bücher-Tab ist aktuell fest nach `id DESC` sortiert
+  (neueste zuerst, `db.get_books()`/`get_duplicate_books()`/
+  `get_books_by_series()` in `db.py`, `ORDER BY b.id DESC`). Gewünscht:
+  Sortierung alphabetisch nach Titel als Option. Noch zu klären vor
+  einem Issue-Zuschnitt: feste Umstellung vs. Sortier-Umschalter (z. B.
+  Chip/Dropdown neben den Filtern) mit mehreren Optionen (Titel, Autor,
+  Erscheinungsdatum, hinzugefügt), und ob das nur die Bücherliste
+  betrifft oder auch Autorenliste/Duplikate-/Serien-Ansicht.
 - **Serien-seriesId-API-Einschränkung** (Ursprungs-Recherche vom
   2026-09-10, weiterhin relevant für Issue #12): kein Google-Books-API-
   Endpunkt, um nach allen Büchern einer `seriesId` zu suchen, keine

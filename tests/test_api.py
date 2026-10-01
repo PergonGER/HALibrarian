@@ -183,6 +183,56 @@ async def test_async_lookup_isbn_google_isbn_mismatch_falls_back() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_lookup_isbn_google_retries_on_503_then_succeeds() -> None:
+    """503/429 from Google Books are transient rate-limit responses
+    (observed in practice even with an API key configured, since the
+    short-window burst limit is separate from the daily quota a key
+    raises) - a couple of short retries should recover instead of
+    immediately giving up and falling through to Open Library.
+    """
+    mock_hass = MagicMock()
+    mock_session = MagicMock()
+
+    resp_503 = AsyncMock()
+    resp_503.status = 503
+    cm_503 = AsyncMock()
+    cm_503.__aenter__.return_value = resp_503
+
+    resp_200 = AsyncMock()
+    resp_200.status = 200
+    resp_200.json = AsyncMock(
+        return_value={
+            "totalItems": 1,
+            "items": [
+                {
+                    "volumeInfo": {
+                        "title": "Recovered After Retry",
+                        "authors": ["Author"],
+                    }
+                }
+            ],
+        }
+    )
+    cm_200 = AsyncMock()
+    cm_200.__aenter__.return_value = resp_200
+
+    mock_session.get.side_effect = [cm_503, cm_200]
+
+    with (
+        patch(
+            "custom_components.library_tracker.api.async_get_clientsession",
+            return_value=mock_session,
+        ),
+        patch("asyncio.sleep", AsyncMock()),
+    ):
+        result = await async_lookup_isbn(mock_hass, "9780132350884")
+
+    assert result is not None
+    assert result["title"] == "Recovered After Retry"
+    assert mock_session.get.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_async_lookup_isbn_not_found() -> None:
     """Test lookup when neither API finds the book."""
     mock_hass = MagicMock()
@@ -249,6 +299,53 @@ async def test_async_find_cover_url_google_success() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_find_cover_url_accepts_isbn_mismatch() -> None:
+    """A cover-only lookup must accept a Google Books hit even if the
+    item's own ISBN doesn't match the one we queried - unlike
+    async_lookup_isbn(), where the same mismatch is rejected to avoid
+    substituting a wrong book's title/author. Books still missing a cover
+    are disproportionately ones whose stored ISBN didn't cleanly match
+    Google's index in the first place, so a strict match here would keep
+    rejecting most of them again.
+    """
+    mock_hass = MagicMock()
+    mock_session = MagicMock()
+
+    mock_google_resp = AsyncMock()
+    mock_google_resp.status = 200
+    mock_google_resp.json = AsyncMock(
+        return_value={
+            "totalItems": 1,
+            "items": [
+                {
+                    "volumeInfo": {
+                        "title": "Das Profil",
+                        "authors": ["Hubertus Borck"],
+                        "imageLinks": {
+                            "thumbnail": "http://books.google.com/cover.jpg"
+                        },
+                        "industryIdentifiers": [
+                            {"type": "ISBN_13", "identifier": "9789999999999"}
+                        ],
+                    }
+                }
+            ],
+        }
+    )
+    cm = AsyncMock()
+    cm.__aenter__.return_value = mock_google_resp
+    mock_session.get.return_value = cm
+
+    with patch(
+        "custom_components.library_tracker.api.async_get_clientsession",
+        return_value=mock_session,
+    ):
+        cover = await async_find_cover_url(mock_hass, "9781234567897")
+
+    assert cover == "https://books.google.com/cover.jpg"
+
+
+@pytest.mark.asyncio
 async def test_async_find_cover_url_open_library_and_direct_fallback() -> None:
     """Test finding cover falling back to Open Library API and then direct endpoint."""
     mock_hass = MagicMock()
@@ -306,6 +403,10 @@ async def test_async_find_cover_url_open_library_and_direct_fallback() -> None:
         cover_direct
         == "https://covers.openlibrary.org/b/isbn/9780132350884-L.jpg?default=false"
     )
+    # aiohttp's .head() defaults to NOT following redirects (unlike
+    # .get()) - must be passed explicitly, otherwise a real cover behind
+    # Open Library's routine 302 redirect gets misread as absent.
+    assert mock_session2.head.call_args.kwargs.get("allow_redirects") is True
 
     # 3. Test direct HEAD endpoint returning 404 (None returned)
     mock_session3 = MagicMock()
