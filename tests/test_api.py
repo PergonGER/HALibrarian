@@ -353,6 +353,10 @@ async def test_async_find_cover_url_open_library_and_direct_fallback() -> None:
         cover_direct
         == "https://covers.openlibrary.org/b/isbn/9780132350884-L.jpg?default=false"
     )
+    # aiohttp's .head() defaults to NOT following redirects (unlike
+    # .get()) - must be passed explicitly, otherwise a real cover behind
+    # Open Library's routine 302 redirect gets misread as absent.
+    assert mock_session2.head.call_args.kwargs.get("allow_redirects") is True
 
     # 3. Test direct HEAD endpoint returning 404 (None returned)
     mock_session3 = MagicMock()

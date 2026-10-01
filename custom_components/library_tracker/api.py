@@ -97,7 +97,17 @@ async def async_find_cover_url(
     )
     try:
         async with asyncio.timeout(REQUEST_TIMEOUT):
-            async with session.head(direct_cover_url) as response:
+            # allow_redirects=True: aiohttp's .head() defaults to NOT
+            # following redirects (unlike .get()) - Open Library's cover
+            # endpoint routinely 302-redirects a HEAD request to the
+            # actual image when a cover exists, which was being
+            # misread as "no cover" (confirmed via debug logs showing
+            # "status 302" for books that do have a cover on Open
+            # Library). Without this, nearly every real cover behind a
+            # redirect was silently discarded.
+            async with session.head(
+                direct_cover_url, allow_redirects=True
+            ) as response:
                 if response.status == 200:
                     return direct_cover_url
                 _LOGGER.debug(
