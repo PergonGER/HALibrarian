@@ -273,16 +273,36 @@ async def _async_query_google_books(
         url += f"&key={api_key}"
 
     try:
-        async with asyncio.timeout(REQUEST_TIMEOUT):
-            async with session.get(url) as response:
-                if response.status != 200:
+        # 503/429 are Google's transient "temporarily overloaded/rate
+        # limited" responses, observed in practice during the cover
+        # backfill's rapid sequential requests even with an API key
+        # configured (the per-100-seconds burst limit is independent of
+        # the daily quota a key raises). A couple of short retries clears
+        # most of these; any other non-200 status is treated as a real
+        # "no match" straight away, not retried.
+        data = None
+        for attempt in range(3):
+            async with asyncio.timeout(REQUEST_TIMEOUT):
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        break
+                    if response.status in (503, 429) and attempt < 2:
+                        _LOGGER.debug(
+                            "Google Books API returned status %s for ISBN "
+                            "%s - retrying (attempt %s/3)",
+                            response.status,
+                            isbn,
+                            attempt + 1,
+                        )
+                        await asyncio.sleep(1 * (attempt + 1))
+                        continue
                     _LOGGER.debug(
                         "Google Books API returned status %s for ISBN %s",
                         response.status,
                         isbn,
                     )
                     return None
-                data = await response.json()
 
         total_items = data.get("totalItems", 0)
         items = data.get("items", [])

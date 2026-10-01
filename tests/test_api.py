@@ -183,6 +183,56 @@ async def test_async_lookup_isbn_google_isbn_mismatch_falls_back() -> None:
 
 
 @pytest.mark.asyncio
+async def test_async_lookup_isbn_google_retries_on_503_then_succeeds() -> None:
+    """503/429 from Google Books are transient rate-limit responses
+    (observed in practice even with an API key configured, since the
+    short-window burst limit is separate from the daily quota a key
+    raises) - a couple of short retries should recover instead of
+    immediately giving up and falling through to Open Library.
+    """
+    mock_hass = MagicMock()
+    mock_session = MagicMock()
+
+    resp_503 = AsyncMock()
+    resp_503.status = 503
+    cm_503 = AsyncMock()
+    cm_503.__aenter__.return_value = resp_503
+
+    resp_200 = AsyncMock()
+    resp_200.status = 200
+    resp_200.json = AsyncMock(
+        return_value={
+            "totalItems": 1,
+            "items": [
+                {
+                    "volumeInfo": {
+                        "title": "Recovered After Retry",
+                        "authors": ["Author"],
+                    }
+                }
+            ],
+        }
+    )
+    cm_200 = AsyncMock()
+    cm_200.__aenter__.return_value = resp_200
+
+    mock_session.get.side_effect = [cm_503, cm_200]
+
+    with (
+        patch(
+            "custom_components.library_tracker.api.async_get_clientsession",
+            return_value=mock_session,
+        ),
+        patch("asyncio.sleep", AsyncMock()),
+    ):
+        result = await async_lookup_isbn(mock_hass, "9780132350884")
+
+    assert result is not None
+    assert result["title"] == "Recovered After Retry"
+    assert mock_session.get.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_async_lookup_isbn_not_found() -> None:
     """Test lookup when neither API finds the book."""
     mock_hass = MagicMock()
