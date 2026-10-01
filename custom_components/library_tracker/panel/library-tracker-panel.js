@@ -1361,20 +1361,53 @@ class LibraryTrackerPanel extends HTMLElement {
     const btnBackfillCovers = this.$("#btn-backfill-covers");
     if (btnBackfillCovers) {
       btnBackfillCovers.addEventListener("click", async () => {
+        const originalText = "Fehlende Cover nachladen";
         btnBackfillCovers.disabled = true;
+        btnBackfillCovers.textContent = "Suche läuft …";
         this._showToast("Suche läuft …");
+
+        let unsub = null;
         try {
-          const res = await this._hass.callWS({
-            type: "library_tracker/books/backfill_covers",
-          });
-          const totalFound = res ? (res.updated || 0) : 0;
-          const totalChecked = res ? (res.checked || 0) : 0;
-          this._showToast(`Für ${totalFound} von ${totalChecked} Büchern ein Cover gefunden.`);
-          this._loadBooks();
+          unsub = await this._hass.connection.subscribeMessage(
+            (event) => {
+              if (!event) return;
+              if (event.error) {
+                this._showToast("Fehler bei der Cover-Suche: " + event.error, true);
+                btnBackfillCovers.textContent = originalText;
+                btnBackfillCovers.disabled = false;
+                if (unsub) {
+                  unsub();
+                  unsub = null;
+                }
+                return;
+              }
+              if (event.done) {
+                const totalFound = event.updated || 0;
+                const totalChecked = event.checked || 0;
+                this._showToast(`Für ${totalFound} von ${totalChecked} Büchern ein Cover gefunden.`);
+                this._loadBooks();
+                btnBackfillCovers.textContent = originalText;
+                btnBackfillCovers.disabled = false;
+                if (unsub) {
+                  unsub();
+                  unsub = null;
+                }
+              } else {
+                const checkedCount = event.checked || 0;
+                const totalCount = event.total || 0;
+                btnBackfillCovers.textContent = `${checkedCount} von ${totalCount} geprüft …`;
+              }
+            },
+            { type: "library_tracker/books/backfill_covers" }
+          );
         } catch (err) {
           this._showToast("Fehler bei der Cover-Suche: " + (err.message || err), true);
-        } finally {
+          btnBackfillCovers.textContent = originalText;
           btnBackfillCovers.disabled = false;
+          if (unsub) {
+            unsub();
+            unsub = null;
+          }
         }
       });
     }

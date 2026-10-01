@@ -452,6 +452,7 @@ async def ws_books_backfill_covers(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
 ) -> None:
     """Find and set missing cover URLs for existing books without covers."""
+    result_sent = False
     try:
         db = _get_db(hass)
         api_key = _get_google_api_key(hass)
@@ -459,38 +460,75 @@ async def ws_books_backfill_covers(
             db.get_books_without_cover
         )
 
+        connection.send_result(msg["id"])
+        result_sent = True
+
+        total = len(books_without_cover)
         checked = 0
         updated = 0
         skipped_no_isbn = 0
+
+        if total == 0:
+            connection.send_event(
+                msg["id"],
+                {
+                    "checked": 0,
+                    "total": 0,
+                    "updated": 0,
+                    "skipped_no_isbn": 0,
+                    "done": True,
+                },
+            )
+            return
 
         for i, book in enumerate(books_without_cover):
             isbn = (book.get("isbn") or "").strip()
             if not isbn:
                 skipped_no_isbn += 1
-                continue
+            else:
+                if i > 0:
+                    await asyncio.sleep(0.3)
 
-            if i > 0:
-                await asyncio.sleep(0.3)
+                checked += 1
+                cover_url = await async_find_cover_url(hass, isbn, google_api_key=api_key)
+                if cover_url:
+                    await hass.async_add_executor_job(
+                        partial(db.update_book, book["id"], cover_url=cover_url)
+                    )
+                    updated += 1
 
-            checked += 1
-            cover_url = await async_find_cover_url(hass, isbn, google_api_key=api_key)
-            if cover_url:
-                await hass.async_add_executor_job(
-                    partial(db.update_book, book["id"], cover_url=cover_url)
-                )
-                updated += 1
+            connection.send_event(
+                msg["id"],
+                {
+                    "checked": checked,
+                    "total": total,
+                    "updated": updated,
+                    "done": False,
+                },
+            )
 
-        connection.send_result(
+        connection.send_event(
             msg["id"],
             {
                 "checked": checked,
+                "total": total,
                 "updated": updated,
                 "skipped_no_isbn": skipped_no_isbn,
+                "done": True,
             },
         )
     except Exception as err:
         _LOGGER.error("Error in library_tracker/books/backfill_covers: %s", err)
-        connection.send_error(msg["id"], "api_error", str(err))
+        if result_sent:
+            connection.send_event(
+                msg["id"],
+                {
+                    "error": str(err),
+                    "done": True,
+                },
+            )
+        else:
+            connection.send_error(msg["id"], "api_error", str(err))
 
 
 @websocket_api.websocket_command(
