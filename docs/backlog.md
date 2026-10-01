@@ -7,6 +7,10 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~ISBN fehlt im Buch-Detail-Popup~~ — umgesetzt 2026-10-01 (v0.14.5,
+  direkter Fix): einzeilige Ergänzung (`#detail-isbn`) unter dem
+  Status/Datum-Block im Detail-Popup, nur sichtbar wenn eine ISBN
+  vorhanden ist.
 - ~~Google Books 503 während Cover-Nachladung führte sofort zum
   Fallback~~ — gefixt 2026-10-01 (v0.14.4, direkter Fix via Debug-Logs
   diagnostiziert): Nutzer hatte bereits einen Google-Books-API-Key
@@ -181,10 +185,6 @@ nur eine Merkliste, damit nichts verloren geht.
   Chip/Dropdown neben den Filtern) mit mehreren Optionen (Titel, Autor,
   Erscheinungsdatum, hinzugefügt), und ob das nur die Bücherliste
   betrifft oder auch Autorenliste/Duplikate-/Serien-Ansicht.
-- **ISBN fehlt im Buch-Detail-Popup** (Nutzerwunsch 2026-09-29): Das
-  Detail-Popup (`_openBookDetailDialog`) zeigt aktuell Titel, Autor,
-  Status, Erscheinungsdatum und Bewertung, aber keine ISBN — wäre beim
-  Nachschlagen/Vergleichen nützlich. Nicht dringend ("bei Gelegenheit").
 - **Serien-seriesId-API-Einschränkung** (Ursprungs-Recherche vom
   2026-09-10, weiterhin relevant für Issue #12): kein Google-Books-API-
   Endpunkt, um nach allen Büchern einer `seriesId` zu suchen, keine
