@@ -24,6 +24,9 @@ class LibraryTrackerPanel extends HTMLElement {
     this._currentBooks = [];
     this._currentAuthors = [];
 
+    this._currentDetailBook = null;
+    this._pendingCoverBase64 = null;
+
     this._SETTINGS_STORAGE_KEY = "library_tracker_settings";
   }
 
@@ -305,6 +308,26 @@ class LibraryTrackerPanel extends HTMLElement {
           <div class="lt-form__actions">
             <button type="button" id="btn-confirm-cancel" class="lt-btn lt-btn--secondary">Abbrechen</button>
             <button type="button" id="btn-confirm-ok" class="lt-btn lt-btn--danger">Löschen</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAMERA FILE INPUT FOR COVER PHOTOS -->
+      <input type="file" id="cover-file-input" accept="image/*" capture="environment" style="display: none;" />
+
+      <!-- COVER PREVIEW DIALOG -->
+      <div id="cover-preview-dialog" class="lt-dialog-overlay" hidden>
+        <div class="lt-dialog__content lt-cover-preview">
+          <div class="lt-dialog__header">
+            <h3>Cover-Vorschau</h3>
+            <button id="btn-close-cover-preview" class="lt-dialog__close">&times;</button>
+          </div>
+          <div class="lt-cover-preview__body">
+            <img id="cover-preview-img" class="lt-cover-preview__img" alt="Foto-Vorschau" />
+          </div>
+          <div class="lt-form__actions">
+            <button type="button" id="btn-cover-retake" class="lt-btn lt-btn--secondary">Erneut aufnehmen</button>
+            <button type="button" id="btn-cover-use" class="lt-btn lt-btn--primary">Verwenden</button>
           </div>
         </div>
       </div>
@@ -789,8 +812,20 @@ class LibraryTrackerPanel extends HTMLElement {
     const dialog = this.$("#book-detail-dialog");
     if (!dialog) return;
 
+    this._currentDetailBook = book;
+
     const coverContainer = this.$("#detail-cover-container");
     if (coverContainer) {
+      coverContainer.title = "Foto als Cover aufnehmen / ändern";
+      coverContainer.setAttribute("aria-label", "Foto als Cover aufnehmen / ändern");
+      coverContainer.setAttribute("role", "button");
+      coverContainer.onclick = () => {
+        const coverFileInput = this.$("#cover-file-input");
+        if (coverFileInput) {
+          coverFileInput.value = "";
+          coverFileInput.click();
+        }
+      };
       if (book.cover_url) {
         coverContainer.innerHTML = `<img src="${this._escapeHtml(book.cover_url)}" class="lt-book-detail__cover-img" alt="Cover" />`;
       } else {
@@ -1533,6 +1568,110 @@ class LibraryTrackerPanel extends HTMLElement {
         this._showToast("Fehler beim Speichern: " + (err.message || err), true);
       }
     });
+
+    // Cover Photo Upload via Camera File Input
+    const coverFileInput = this.$("#cover-file-input");
+    if (coverFileInput) {
+      coverFileInput.addEventListener("change", (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            const maxDim = 800;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const resizedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+            this._pendingCoverBase64 = resizedDataUrl.split(",")[1];
+
+            const previewImg = this.$("#cover-preview-img");
+            if (previewImg) {
+              previewImg.src = resizedDataUrl;
+            }
+
+            const previewDialog = this.$("#cover-preview-dialog");
+            if (previewDialog) {
+              previewDialog.hidden = false;
+            }
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    const btnCloseCoverPreview = this.$("#btn-close-cover-preview");
+    if (btnCloseCoverPreview) {
+      btnCloseCoverPreview.addEventListener("click", () => {
+        const previewDialog = this.$("#cover-preview-dialog");
+        if (previewDialog) previewDialog.hidden = true;
+        if (coverFileInput) coverFileInput.value = "";
+      });
+    }
+
+    const btnCoverRetake = this.$("#btn-cover-retake");
+    if (btnCoverRetake) {
+      btnCoverRetake.addEventListener("click", () => {
+        if (coverFileInput) {
+          coverFileInput.value = "";
+          coverFileInput.click();
+        }
+      });
+    }
+
+    const btnCoverUse = this.$("#btn-cover-use");
+    if (btnCoverUse) {
+      btnCoverUse.addEventListener("click", async () => {
+        if (!this._currentDetailBook || !this._pendingCoverBase64) return;
+
+        btnCoverUse.disabled = true;
+        btnCoverUse.textContent = "Speichere …";
+
+        try {
+          const updatedBook = await this._hass.callWS({
+            type: "library_tracker/books/upload_cover",
+            book_id: this._currentDetailBook.id,
+            image_data: this._pendingCoverBase64,
+          });
+
+          this._currentDetailBook = updatedBook;
+          const previewDialog = this.$("#cover-preview-dialog");
+          if (previewDialog) previewDialog.hidden = true;
+          if (coverFileInput) coverFileInput.value = "";
+
+          const coverContainer = this.$("#detail-cover-container");
+          if (coverContainer && updatedBook.cover_url) {
+            coverContainer.innerHTML = `<img src="${this._escapeHtml(updatedBook.cover_url)}" class="lt-book-detail__cover-img" alt="Cover" />`;
+          }
+
+          this._showToast("Cover-Foto erfolgreich gespeichert.");
+          this._loadBooks();
+        } catch (err) {
+          this._showToast("Fehler beim Speichern des Cover-Fotos: " + (err.message || err), true);
+        } finally {
+          btnCoverUse.disabled = false;
+          btnCoverUse.textContent = "Verwenden";
+        }
+      });
+    }
 
     // Scanner Controls
     this.$("#btn-start-scanner").addEventListener("click", () => this._startScanner());

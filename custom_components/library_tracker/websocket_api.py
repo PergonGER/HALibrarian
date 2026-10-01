@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from functools import partial
 import logging
+from pathlib import Path
+import time
 from typing import Any
+import uuid
 
 import voluptuous as vol
 
@@ -21,7 +25,7 @@ from .api import (
     async_lookup_isbn,
     async_search_books_by_text,
 )
-from .const import CONF_GOOGLE_BOOKS_API_KEY, DOMAIN
+from .const import CONF_GOOGLE_BOOKS_API_KEY, COVERS_DIR_NAME, COVERS_URL_BASE, DOMAIN
 from .db import LibraryTrackerDatabase
 
 _LOGGER = logging.getLogger(__name__)
@@ -32,6 +36,16 @@ def _get_db(hass: HomeAssistant) -> LibraryTrackerDatabase:
     if DOMAIN not in hass.data or "db" not in hass.data[DOMAIN]:
         raise RuntimeError("Library Tracker database is not initialized.")
     return hass.data[DOMAIN]["db"]  # type: ignore[no-any-return]
+
+
+def _save_cover_file(covers_dir_path: str, book_id: int, image_bytes: bytes) -> str:
+    """Save image bytes to covers directory with a unique filename."""
+    dir_path = Path(covers_dir_path)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    filename = f"{book_id}_{int(time.time())}_{uuid.uuid4().hex[:8]}.jpg"
+    target_path = dir_path / filename
+    target_path.write_bytes(image_bytes)
+    return filename
 
 
 def _get_google_api_key(hass: HomeAssistant) -> str | None:
@@ -533,6 +547,61 @@ async def ws_books_backfill_covers(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "library_tracker/books/upload_cover",
+        vol.Required("book_id"): vol.Coerce(int),
+        vol.Required("image_data"): vol.All(cv.string, vol.Strip),
+    }
+)
+@websocket_api.async_response
+async def ws_books_upload_cover(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Upload and set a cover image for a book."""
+    try:
+        db = _get_db(hass)
+        book_id = msg["book_id"]
+        raw_image_data = msg["image_data"]
+
+        # Limit payload size (~7MB base64 string length limit / ~5MB binary payload)
+        if len(raw_image_data) > 7_000_000:
+            connection.send_error(
+                msg["id"], "invalid_format", "Image data exceeds maximum size limit"
+            )
+            return
+
+        book = await hass.async_add_executor_job(db.get_book, book_id)
+        if book is None:
+            connection.send_error(
+                msg["id"], "not_found", f"Book with id {book_id} not found"
+            )
+            return
+
+        try:
+            image_bytes = base64.b64decode(raw_image_data)
+        except Exception as err:
+            connection.send_error(
+                msg["id"], "invalid_format", f"Invalid base64 image data: {err}"
+            )
+            return
+
+        covers_dir = hass.config.path(COVERS_DIR_NAME)
+        filename = await hass.async_add_executor_job(
+            _save_cover_file, covers_dir, book_id, image_bytes
+        )
+
+        cover_url = f"{COVERS_URL_BASE}/{filename}"
+        updated = await hass.async_add_executor_job(
+            db.update_book, book_id, None, None, None, None, None, cover_url
+        )
+
+        connection.send_result(msg["id"], updated)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/books/upload_cover: %s", err)
+        connection.send_error(msg["id"], "upload_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "library_tracker/version",
     }
 )
@@ -572,6 +641,7 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_books_search_text)
     websocket_api.async_register_command(hass, ws_books_ai_series_lookup)
     websocket_api.async_register_command(hass, ws_books_backfill_covers)
+    websocket_api.async_register_command(hass, ws_books_upload_cover)
     websocket_api.async_register_command(hass, ws_version)
 
     hass.data.setdefault(DOMAIN, {})["ws_commands_registered"] = True
