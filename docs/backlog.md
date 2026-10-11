@@ -7,6 +7,22 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Eigenes Foto als Buch-Cover aufnehmen~~ — umgesetzt 2026-10-11 via
+  Jules-PR #36 (Issue #34, v0.16.0): Klick auf das Cover im
+  Detail-Popup öffnet die Kamera (`<input type="file" capture=
+  "environment">`, bewusst **nicht** `getUserMedia`/Live-Stream wie der
+  ISBN-Scanner — kein HTTPS nötig), Vorschau mit "Verwenden"/"Erneut
+  aufnehmen", clientseitig auf max. 800px verkleinert/komprimiert.
+  Fotos liegen in `hass.config.path("library_tracker_covers")`
+  (überlebt HACS-Updates, nicht im Integrations-Ordner) mit eindeutigem
+  Dateinamen pro Upload. Beim Review den vom Nutzer vorab angesprochenen
+  Punkt bestätigt und direkt selbst nachgezogen: alte Foto-Dateien
+  wurden weder beim Ersetzen noch beim Löschen des Buchs entfernt
+  (unbegrenztes Wachstum bei häufigem Gebrauch) — jetzt werden sie beim
+  Ersetzen und beim Buch-Löschen automatisch mitentfernt. Bekannte,
+  bewusst nicht geschlossene Restlücke: manuelles Ändern/Leeren von
+  `cover_url` über das normale Bearbeiten-Formular räumt die alte Datei
+  noch nicht auf (seltener Pfad).
 - ~~Sortier-Umschalter für die Bücherliste~~ — umgesetzt 2026-10-11 via
   Jules-PR #35 (Issue #33, v0.15.0): Dropdown "Zuletzt hinzugefügt"
   (Standard) / "Titel (A-Z)" / "Autor (A-Z)" / "Erscheinungsdatum",
