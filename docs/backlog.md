@@ -7,6 +7,17 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Sortier-Umschalter für die Bücherliste~~ — umgesetzt 2026-10-11 via
+  Jules-PR #35 (Issue #33, v0.15.0): Dropdown "Zuletzt hinzugefügt"
+  (Standard) / "Titel (A-Z)" / "Autor (A-Z)" / "Erscheinungsdatum",
+  clientseitig, `localeCompare` mit deutschem Locale für Umlaute,
+  automatisch ausgeblendet im Duplikate-/Serien-Filter. Beim Review
+  gefunden und direkt selbst gefixt: Jules hatte beim Platzieren der
+  Sortierbox `.lt-filter-chips`' `flex: 1 1 100%` auf `flex: 1 1 auto`
+  geändert und damit den Chip-Umbruch-Fix aus v0.12.3 regressiert
+  (Duplikate-Chip auf schmalen Screens wieder abgeschnitten) — per
+  Playwright-Screenshot bei 360px/1000px verifiziert und zurückgesetzt,
+  Sortierbox fällt jetzt sauber auf eine eigene Zeile.
 - ~~Live-Fortschritt bei "Fehlende Cover nachladen"~~ — umgesetzt
   2026-10-01 via Jules-PR #32 (Issue #31, v0.14.6): Button zeigt während
   des Laufs laufend "X von Y geprüft …" statt nur Start-/End-Toast.
