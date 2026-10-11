@@ -266,9 +266,42 @@ body {
      fit all chips in one row (flex-basis: auto = content width) and never
      actually become narrower than that row - so its own flex-wrap never
      had anything to react to. Forcing the basis to the full toolbar width
-     is what makes the wrap above take effect on narrow screens. */
+     is what makes the wrap above take effect on narrow screens. Do not
+     change this back to "flex: 1 1 auto" - that regresses the chip-wrap
+     fix from v0.12.3 (confirmed broken on narrow screens, see
+     docs/backlog.md). .lt-sort-box wrapping to its own line below is an
+     accepted trade-off, not a bug.
+  */
   flex: 1 1 100%;
   min-width: 0;
+}
+
+.lt-sort-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.lt-sort-box[hidden] {
+  display: none !important;
+}
+
+.lt-sort-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lt-text-secondary);
+  white-space: nowrap;
+}
+
+.lt-sort-select {
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: var(--lt-radius-sm);
+  border: 1px solid var(--lt-divider);
+  background: var(--lt-card-bg);
+  color: var(--lt-text-primary);
+  cursor: pointer;
 }
 
 .lt-chip {

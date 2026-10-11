@@ -19,6 +19,7 @@ class LibraryTrackerPanel extends HTMLElement {
     this._currentFilter = "all";
     this._currentSearchQuery = "";
     this._currentSeriesFilterId = null;
+    this._currentSort = "added";
     this._html5QrCode = null;
     this._currentBooksRaw = [];
     this._currentBooks = [];
@@ -121,6 +122,15 @@ class LibraryTrackerPanel extends HTMLElement {
                 <button class="lt-chip" data-filter="ungelesen">Ungelesen</button>
                 <button class="lt-chip" data-filter="wunschliste">Wunschliste</button>
                 <button class="lt-chip" data-filter="duplikate">Duplikate</button>
+              </div>
+              <div id="books-sort-container" class="lt-sort-box">
+                <label for="books-sort-select" class="lt-sort-label">Sortierung:</label>
+                <select id="books-sort-select" class="lt-sort-select">
+                  <option value="added">Zuletzt hinzugefügt</option>
+                  <option value="title">Titel (A-Z)</option>
+                  <option value="author">Autor (A-Z)</option>
+                  <option value="published_date">Erscheinungsdatum</option>
+                </select>
               </div>
             </div>
 
@@ -588,9 +598,15 @@ class LibraryTrackerPanel extends HTMLElement {
   }
 
   _applySearchFilterAndRender() {
+    const isSpecialView = this._currentFilter === "duplikate" || Boolean(this._currentSeriesFilterId);
+    const sortContainer = this.$("#books-sort-container");
+    if (sortContainer) {
+      sortContainer.hidden = isSpecialView;
+    }
+
     const query = this._currentSearchQuery.trim().toLowerCase();
-    const filtered = !query
-      ? this._currentBooksRaw
+    let filtered = !query
+      ? [...this._currentBooksRaw]
       : this._currentBooksRaw.filter((book) => {
           const haystack = [
             book.title,
@@ -604,6 +620,27 @@ class LibraryTrackerPanel extends HTMLElement {
             .toLowerCase();
           return haystack.includes(query);
         });
+
+    if (!isSpecialView && this._currentSort !== "added") {
+      filtered.sort((a, b) => {
+        if (this._currentSort === "title") {
+          return (a.title || "").localeCompare(b.title || "", "de", { sensitivity: "base" });
+        }
+        if (this._currentSort === "author") {
+          return (a.author || "").localeCompare(b.author || "", "de", { sensitivity: "base" });
+        }
+        if (this._currentSort === "published_date") {
+          const dateA = (a.published_date || "").trim();
+          const dateB = (b.published_date || "").trim();
+          if (!dateA && !dateB) return 0;
+          if (!dateA) return 1;
+          if (!dateB) return -1;
+          return dateA.localeCompare(dateB, "de", { numeric: true, sensitivity: "base" });
+        }
+        return 0;
+      });
+    }
+
     this._currentBooks = filtered;
     this._updateBooksCount(filtered);
     this._renderBooks(filtered);
@@ -1419,6 +1456,15 @@ class LibraryTrackerPanel extends HTMLElement {
         this._switchToTab(btn.dataset.tab);
       });
     });
+
+    // Sort Select
+    const sortSelect = this.$("#books-sort-select");
+    if (sortSelect) {
+      sortSelect.addEventListener("change", (e) => {
+        this._currentSort = e.target.value;
+        this._applySearchFilterAndRender();
+      });
+    }
 
     // Filter Chips
     const filterChips = this.$$(".lt-chip");
