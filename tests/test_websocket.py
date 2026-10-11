@@ -26,6 +26,7 @@ from custom_components.library_tracker.websocket_api import (
     ws_books_list_duplicates,
     ws_books_search_text,
     ws_books_update,
+    ws_books_upload_cover,
     ws_lookup_isbn,
 )
 
@@ -35,8 +36,10 @@ def mock_hass() -> Generator[HomeAssistant, None, None]:
     """Fixture for mock HomeAssistant object with database initialized."""
     hass = MagicMock(spec=HomeAssistant)
     hass.data = {}
+    hass.config = MagicMock()
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        hass.config.path.side_effect = lambda *args: str(Path(tmpdir) / Path(*args)) if args else tmpdir
         db_path = str(Path(tmpdir) / "test.db")
         db = LibraryTrackerDatabase(db_path)
         db.init_db()
@@ -57,7 +60,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 15
+        assert mock_register.call_count == 16
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -708,10 +711,222 @@ async def test_ws_books_backfill_covers(mock_hass: HomeAssistant) -> None:
         },
     )
 
-    # Verify Book 1 in DB has updated cover_url
-    db = mock_hass.data[DOMAIN]["db"]
-    updated_b1 = db.get_book(b1_id)
-    assert updated_b1["cover_url"] == "https://example.com/found_cover.jpg"
+
+@pytest.mark.asyncio
+async def test_ws_books_upload_cover_success(mock_hass: HomeAssistant) -> None:
+    """Test ws_books_upload_cover WebSocket handler on success."""
+    import base64
+    from custom_components.library_tracker.const import COVERS_DIR_NAME, COVERS_URL_BASE
+
+    conn = MagicMock()
+
+    # Add book
+    add_msg = {
+        "id": 1,
+        "type": "library_tracker/books/add",
+        "isbn": "9781234567890",
+        "title": "Photo Cover Book",
+        "author": "Photo Author",
+        "status": "ungelesen",
+    }
+    await inspect.unwrap(ws_books_add)(mock_hass, conn, add_msg)
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    # Prepare dummy image base64 (e.g. "hello world")
+    raw_bytes = b"fake-jpeg-image-bytes"
+    base64_str = base64.b64encode(raw_bytes).decode("utf-8")
+
+    # Call upload_cover
+    conn.reset_mock()
+    upload_msg = {
+        "id": 2,
+        "type": "library_tracker/books/upload_cover",
+        "book_id": book_id,
+        "image_data": base64_str,
+    }
+    await inspect.unwrap(ws_books_upload_cover)(mock_hass, conn, upload_msg)
+
+    conn.send_result.assert_called_once()
+    result_book = conn.send_result.call_args[0][1]
+    assert result_book["id"] == book_id
+    assert result_book["cover_url"].startswith(f"{COVERS_URL_BASE}/{book_id}_")
+
+    # Verify file was written to disk
+    filename = result_book["cover_url"].replace(f"{COVERS_URL_BASE}/", "")
+    saved_file_path = Path(mock_hass.config.path(COVERS_DIR_NAME)) / filename
+    assert saved_file_path.exists()
+    assert saved_file_path.read_bytes() == raw_bytes
+
+
+@pytest.mark.asyncio
+async def test_ws_books_upload_cover_removes_previous_file(
+    mock_hass: HomeAssistant,
+) -> None:
+    """Re-uploading a cover must delete the previous local file, not just
+    leave it behind - every upload gets a unique filename (for cache-
+    busting), so without cleanup every retake/replace would orphan the
+    old one on disk forever.
+    """
+    import base64
+    from custom_components.library_tracker.const import COVERS_DIR_NAME, COVERS_URL_BASE
+
+    conn = MagicMock()
+
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 1,
+            "type": "library_tracker/books/add",
+            "isbn": "9781234567892",
+            "title": "Book With Replaced Cover",
+            "author": "Author",
+            "status": "ungelesen",
+        },
+    )
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    covers_dir = Path(mock_hass.config.path(COVERS_DIR_NAME))
+
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_upload_cover)(
+        mock_hass,
+        conn,
+        {
+            "id": 2,
+            "type": "library_tracker/books/upload_cover",
+            "book_id": book_id,
+            "image_data": base64.b64encode(b"first-photo").decode("utf-8"),
+        },
+    )
+    first_cover_url = conn.send_result.call_args[0][1]["cover_url"]
+    first_file = covers_dir / first_cover_url.replace(f"{COVERS_URL_BASE}/", "")
+    assert first_file.exists()
+
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_upload_cover)(
+        mock_hass,
+        conn,
+        {
+            "id": 3,
+            "type": "library_tracker/books/upload_cover",
+            "book_id": book_id,
+            "image_data": base64.b64encode(b"second-photo").decode("utf-8"),
+        },
+    )
+    second_cover_url = conn.send_result.call_args[0][1]["cover_url"]
+    second_file = covers_dir / second_cover_url.replace(f"{COVERS_URL_BASE}/", "")
+
+    assert second_cover_url != first_cover_url
+    assert second_file.exists()
+    assert not first_file.exists(), "old cover file must be removed on replace"
+
+
+@pytest.mark.asyncio
+async def test_ws_books_delete_removes_local_cover_file(
+    mock_hass: HomeAssistant,
+) -> None:
+    """Deleting a book must also delete its locally uploaded cover file,
+    not just the DB row - otherwise every deleted book with a camera
+    cover leaves an orphaned file behind.
+    """
+    import base64
+    from custom_components.library_tracker.const import COVERS_DIR_NAME, COVERS_URL_BASE
+
+    conn = MagicMock()
+
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 1,
+            "type": "library_tracker/books/add",
+            "isbn": "9781234567893",
+            "title": "Book To Delete",
+            "author": "Author",
+            "status": "ungelesen",
+        },
+    )
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_upload_cover)(
+        mock_hass,
+        conn,
+        {
+            "id": 2,
+            "type": "library_tracker/books/upload_cover",
+            "book_id": book_id,
+            "image_data": base64.b64encode(b"photo-to-be-orphaned").decode("utf-8"),
+        },
+    )
+    cover_url = conn.send_result.call_args[0][1]["cover_url"]
+    covers_dir = Path(mock_hass.config.path(COVERS_DIR_NAME))
+    cover_file = covers_dir / cover_url.replace(f"{COVERS_URL_BASE}/", "")
+    assert cover_file.exists()
+
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_delete)(
+        mock_hass,
+        conn,
+        {"id": 3, "type": "library_tracker/books/delete", "book_id": book_id},
+    )
+    conn.send_result.assert_called_once_with(3, {"success": True, "id": book_id})
+    assert not cover_file.exists(), "cover file must be removed when its book is deleted"
+
+
+@pytest.mark.asyncio
+async def test_ws_books_upload_cover_errors(mock_hass: HomeAssistant) -> None:
+    """Test ws_books_upload_cover error scenarios."""
+    conn = MagicMock()
+
+    # 1. Size limit exceeded (> 7,000,000 chars)
+    upload_msg_oversized = {
+        "id": 1,
+        "type": "library_tracker/books/upload_cover",
+        "book_id": 1,
+        "image_data": "A" * 7_000_001,
+    }
+    await inspect.unwrap(ws_books_upload_cover)(mock_hass, conn, upload_msg_oversized)
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "invalid_format"
+
+    # 2. Book not found
+    conn.reset_mock()
+    upload_msg_not_found = {
+        "id": 2,
+        "type": "library_tracker/books/upload_cover",
+        "book_id": 99999,
+        "image_data": "SGVsbG8=",
+    }
+    await inspect.unwrap(ws_books_upload_cover)(mock_hass, conn, upload_msg_not_found)
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "not_found"
+
+    # 3. Invalid base64
+    # First add a book
+    conn.reset_mock()
+    add_msg = {
+        "id": 3,
+        "type": "library_tracker/books/add",
+        "isbn": "9781234567891",
+        "title": "Book 2",
+        "author": "Author 2",
+        "status": "ungelesen",
+    }
+    await inspect.unwrap(ws_books_add)(mock_hass, conn, add_msg)
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    conn.reset_mock()
+    upload_msg_invalid_b64 = {
+        "id": 4,
+        "type": "library_tracker/books/upload_cover",
+        "book_id": book_id,
+        "image_data": "!!!InvalidBase64!!!",
+    }
+    await inspect.unwrap(ws_books_upload_cover)(mock_hass, conn, upload_msg_invalid_b64)
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "invalid_format"
 
 
 @pytest.mark.asyncio

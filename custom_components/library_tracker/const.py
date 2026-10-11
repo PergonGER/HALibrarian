@@ -17,3 +17,7 @@ STATIC_URL_BASE = "/library_tracker_panel"
 
 # Database
 DB_FILENAME = "library_tracker.db"
+
+# Covers Uploads
+COVERS_DIR_NAME = "library_tracker_covers"
+COVERS_URL_BASE = "/library_tracker_covers"

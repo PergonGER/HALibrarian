@@ -7,8 +7,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import HomeAssistant
 
-from custom_components.library_tracker import _async_register_panel, async_unload_entry
+import tempfile
+from pathlib import Path
+
+from custom_components.library_tracker import (
+    _async_register_panel,
+    async_setup_entry,
+    async_unload_entry,
+)
 from custom_components.library_tracker.const import (
+    COVERS_URL_BASE,
     DOMAIN,
     PANEL_ICON,
     PANEL_TITLE,
@@ -71,3 +79,38 @@ async def test_async_unload_entry_removes_panel() -> None:
         assert result is True
         mock_remove.assert_called_once_with(mock_hass, PANEL_URL_PATH)
         assert "panel_registered" not in mock_hass.data[DOMAIN]
+
+
+@pytest.mark.asyncio
+async def test_async_setup_entry_registers_covers_static_path() -> None:
+    """Test async_setup_entry creates covers directory and registers static path."""
+    mock_hass = MagicMock(spec=HomeAssistant)
+    mock_hass.data = {}
+    mock_hass.config = MagicMock()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mock_hass.config.path.side_effect = lambda *args: str(Path(tmpdir) / Path(*args)) if args else tmpdir
+
+        async def async_add_executor_job(target, *args, **kwargs):
+            return target(*args, **kwargs)
+
+        mock_hass.async_add_executor_job = AsyncMock(side_effect=async_add_executor_job)
+        mock_hass.http.async_register_static_paths = AsyncMock()
+
+        mock_entry = MagicMock()
+        mock_entry.entry_id = "test_entry"
+        mock_entry.add_update_listener = MagicMock()
+
+        with (
+            patch("custom_components.library_tracker.LibraryTrackerDatabase") as mock_db_cls,
+            patch("custom_components.library_tracker.async_register_websocket_commands"),
+            patch("custom_components.library_tracker._async_register_panel"),
+        ):
+            mock_db_cls.return_value.init_db = MagicMock()
+            result = await async_setup_entry(mock_hass, mock_entry)
+
+            assert result is True
+            assert mock_hass.data[DOMAIN]["covers_registered"] is True
+            mock_hass.http.async_register_static_paths.assert_called_once()
+            static_config = mock_hass.http.async_register_static_paths.call_args[0][0][0]
+            assert static_config.url_path == COVERS_URL_BASE
