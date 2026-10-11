@@ -759,6 +759,123 @@ async def test_ws_books_upload_cover_success(mock_hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
+async def test_ws_books_upload_cover_removes_previous_file(
+    mock_hass: HomeAssistant,
+) -> None:
+    """Re-uploading a cover must delete the previous local file, not just
+    leave it behind - every upload gets a unique filename (for cache-
+    busting), so without cleanup every retake/replace would orphan the
+    old one on disk forever.
+    """
+    import base64
+    from custom_components.library_tracker.const import COVERS_DIR_NAME, COVERS_URL_BASE
+
+    conn = MagicMock()
+
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 1,
+            "type": "library_tracker/books/add",
+            "isbn": "9781234567892",
+            "title": "Book With Replaced Cover",
+            "author": "Author",
+            "status": "ungelesen",
+        },
+    )
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    covers_dir = Path(mock_hass.config.path(COVERS_DIR_NAME))
+
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_upload_cover)(
+        mock_hass,
+        conn,
+        {
+            "id": 2,
+            "type": "library_tracker/books/upload_cover",
+            "book_id": book_id,
+            "image_data": base64.b64encode(b"first-photo").decode("utf-8"),
+        },
+    )
+    first_cover_url = conn.send_result.call_args[0][1]["cover_url"]
+    first_file = covers_dir / first_cover_url.replace(f"{COVERS_URL_BASE}/", "")
+    assert first_file.exists()
+
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_upload_cover)(
+        mock_hass,
+        conn,
+        {
+            "id": 3,
+            "type": "library_tracker/books/upload_cover",
+            "book_id": book_id,
+            "image_data": base64.b64encode(b"second-photo").decode("utf-8"),
+        },
+    )
+    second_cover_url = conn.send_result.call_args[0][1]["cover_url"]
+    second_file = covers_dir / second_cover_url.replace(f"{COVERS_URL_BASE}/", "")
+
+    assert second_cover_url != first_cover_url
+    assert second_file.exists()
+    assert not first_file.exists(), "old cover file must be removed on replace"
+
+
+@pytest.mark.asyncio
+async def test_ws_books_delete_removes_local_cover_file(
+    mock_hass: HomeAssistant,
+) -> None:
+    """Deleting a book must also delete its locally uploaded cover file,
+    not just the DB row - otherwise every deleted book with a camera
+    cover leaves an orphaned file behind.
+    """
+    import base64
+    from custom_components.library_tracker.const import COVERS_DIR_NAME, COVERS_URL_BASE
+
+    conn = MagicMock()
+
+    await inspect.unwrap(ws_books_add)(
+        mock_hass,
+        conn,
+        {
+            "id": 1,
+            "type": "library_tracker/books/add",
+            "isbn": "9781234567893",
+            "title": "Book To Delete",
+            "author": "Author",
+            "status": "ungelesen",
+        },
+    )
+    book_id = conn.send_result.call_args[0][1]["id"]
+
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_upload_cover)(
+        mock_hass,
+        conn,
+        {
+            "id": 2,
+            "type": "library_tracker/books/upload_cover",
+            "book_id": book_id,
+            "image_data": base64.b64encode(b"photo-to-be-orphaned").decode("utf-8"),
+        },
+    )
+    cover_url = conn.send_result.call_args[0][1]["cover_url"]
+    covers_dir = Path(mock_hass.config.path(COVERS_DIR_NAME))
+    cover_file = covers_dir / cover_url.replace(f"{COVERS_URL_BASE}/", "")
+    assert cover_file.exists()
+
+    conn.reset_mock()
+    await inspect.unwrap(ws_books_delete)(
+        mock_hass,
+        conn,
+        {"id": 3, "type": "library_tracker/books/delete", "book_id": book_id},
+    )
+    conn.send_result.assert_called_once_with(3, {"success": True, "id": book_id})
+    assert not cover_file.exists(), "cover file must be removed when its book is deleted"
+
+
+@pytest.mark.asyncio
 async def test_ws_books_upload_cover_errors(mock_hass: HomeAssistant) -> None:
     """Test ws_books_upload_cover error scenarios."""
     conn = MagicMock()

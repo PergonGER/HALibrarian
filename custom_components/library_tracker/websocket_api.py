@@ -48,6 +48,30 @@ def _save_cover_file(covers_dir_path: str, book_id: int, image_bytes: bytes) -> 
     return filename
 
 
+def _delete_cover_file_if_local(covers_dir_path: str, cover_url: str | None) -> None:
+    """Remove a previously uploaded cover file from disk, if any.
+
+    Every upload gets a unique filename (for cache-busting - see
+    _save_cover_file), so replacing a cover or deleting its book would
+    otherwise leave the old file behind forever. Only touches files under
+    COVERS_URL_BASE (our own uploads) - a cover_url from Google Books/Open
+    Library is a remote URL and is left alone. Best-effort: a missing or
+    unremovable file isn't fatal to the surrounding operation.
+    """
+    if not cover_url or not cover_url.startswith(f"{COVERS_URL_BASE}/"):
+        return
+    filename = cover_url[len(f"{COVERS_URL_BASE}/") :]
+    # Reject any path traversal/separators - filenames we generate never
+    # contain them, so anything else here is not one of ours to delete.
+    if not filename or "/" in filename or "\\" in filename:
+        return
+    file_path = Path(covers_dir_path) / filename
+    try:
+        file_path.unlink(missing_ok=True)
+    except OSError:
+        _LOGGER.debug("Could not remove old cover file %s", file_path, exc_info=True)
+
+
 def _get_google_api_key(hass: HomeAssistant) -> str | None:
     """Extract Google Books API key from config entries if available."""
     entries = hass.config_entries.async_entries(DOMAIN)
@@ -267,12 +291,23 @@ async def ws_books_delete(
             )
             return
 
+        # Fetch before deleting so a locally uploaded cover file (see
+        # ws_books_upload_cover) doesn't become an orphan on disk once
+        # the book row referencing it is gone.
+        book = await hass.async_add_executor_job(db.get_book, book_id)
+
         deleted = await hass.async_add_executor_job(db.delete_book, book_id)
         if not deleted:
             connection.send_error(
                 msg["id"], "not_found", f"Book with id {book_id} not found"
             )
             return
+
+        if book is not None:
+            covers_dir = hass.config.path(COVERS_DIR_NAME)
+            await hass.async_add_executor_job(
+                _delete_cover_file_if_local, covers_dir, book["cover_url"]
+            )
 
         connection.send_result(msg["id"], {"success": True, "id": book_id})
     except Exception as err:
@@ -592,6 +627,14 @@ async def ws_books_upload_cover(
         cover_url = f"{COVERS_URL_BASE}/{filename}"
         updated = await hass.async_add_executor_job(
             db.update_book, book_id, None, None, None, None, None, cover_url
+        )
+
+        # Remove the previous cover file now that the new one is saved and
+        # the DB points at it - otherwise every retake/replace leaves an
+        # orphaned file behind (unique filenames per upload mean the old
+        # one is never reused on its own).
+        await hass.async_add_executor_job(
+            _delete_cover_file_if_local, covers_dir, book["cover_url"]
         )
 
         connection.send_result(msg["id"], updated)
