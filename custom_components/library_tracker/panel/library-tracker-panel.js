@@ -27,6 +27,8 @@ class LibraryTrackerPanel extends HTMLElement {
 
     this._currentDetailBook = null;
     this._pendingCoverBase64 = null;
+    this._coverStream = null;
+    this._lastCoverSource = null;
 
     this._SETTINGS_STORAGE_KEY = "library_tracker_settings";
   }
@@ -51,6 +53,7 @@ class LibraryTrackerPanel extends HTMLElement {
 
   disconnectedCallback() {
     this._stopScanner();
+    this._stopCoverCamera();
   }
 
   // html5-qrcode looks up its target element via the *global*
@@ -325,6 +328,39 @@ class LibraryTrackerPanel extends HTMLElement {
       <!-- CAMERA FILE INPUT FOR COVER PHOTOS -->
       <input type="file" id="cover-file-input" accept="image/*" capture="environment" style="display: none;" />
 
+      <!-- COVER SOURCE SELECTION DIALOG -->
+      <div id="cover-source-dialog" class="lt-dialog-overlay" hidden>
+        <div class="lt-dialog__content lt-cover-source">
+          <div class="lt-dialog__header">
+            <h3>Cover-Foto Quelle</h3>
+            <button id="btn-close-cover-source" class="lt-dialog__close">&times;</button>
+          </div>
+          <p>Wie möchtest du das Cover-Foto hinzufügen?</p>
+          <div class="lt-cover-source__options">
+            <button type="button" id="btn-cover-source-camera" class="lt-btn lt-btn--primary">📷 Kamera</button>
+            <button type="button" id="btn-cover-source-gallery" class="lt-btn lt-btn--secondary">🖼️ Aus Galerie wählen</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVE COVER CAMERA DIALOG -->
+      <div id="cover-camera-dialog" class="lt-dialog-overlay" hidden>
+        <div class="lt-dialog__content lt-cover-camera">
+          <div class="lt-dialog__header">
+            <h3>Foto aufnehmen</h3>
+            <button id="btn-close-cover-camera" class="lt-dialog__close">&times;</button>
+          </div>
+          <div id="cover-camera-error" class="lt-alert lt-alert--error" hidden></div>
+          <div class="lt-cover-camera__viewport">
+            <video id="cover-camera-video" playsinline autoplay muted></video>
+          </div>
+          <div class="lt-form__actions">
+            <button type="button" id="btn-cover-camera-cancel" class="lt-btn lt-btn--secondary">Abbrechen</button>
+            <button type="button" id="btn-cover-camera-snap" class="lt-btn lt-btn--primary">Foto aufnehmen</button>
+          </div>
+        </div>
+      </div>
+
       <!-- COVER PREVIEW DIALOG -->
       <div id="cover-preview-dialog" class="lt-dialog-overlay" hidden>
         <div class="lt-dialog__content lt-cover-preview">
@@ -445,6 +481,131 @@ class LibraryTrackerPanel extends HTMLElement {
       } else {
         booksGrid.style.removeProperty("--lt-books-columns");
       }
+    }
+  }
+
+  _openCoverSourceDialog() {
+    const dialog = this.$("#cover-source-dialog");
+    if (dialog) {
+      dialog.hidden = false;
+    }
+  }
+
+  _closeCoverSourceDialog() {
+    const dialog = this.$("#cover-source-dialog");
+    if (dialog) {
+      dialog.hidden = true;
+    }
+  }
+
+  async _startCoverCamera() {
+    const dialog = this.$("#cover-camera-dialog");
+    const errorEl = this.$("#cover-camera-error");
+    const videoEl = this.$("#cover-camera-video");
+
+    if (errorEl) {
+      errorEl.hidden = true;
+      errorEl.textContent = "";
+    }
+
+    if (dialog) {
+      dialog.hidden = false;
+    }
+
+    this._stopCoverCamera();
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("navigator.mediaDevices.getUserMedia wird in diesem Browser nicht unterstützt.");
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+
+      this._coverStream = stream;
+      if (videoEl) {
+        videoEl.srcObject = stream;
+        videoEl.play().catch(() => {});
+      }
+    } catch (err) {
+      let msg = "Kamerazugriff fehlgeschlagen.";
+      if (err && err.toString().includes("NotAllowedError")) {
+        msg = "Kamerazugriff wurde im Browser verweigert. Bitte Berechtigung erteilen.";
+      } else if (err && err.toString().includes("NotFoundError")) {
+        msg = "Keine geeignete Kamera gefunden.";
+      } else if (err) {
+        msg += " (" + (err.message || err) + ")";
+      }
+      if (errorEl) {
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+      }
+    }
+  }
+
+  _stopCoverCamera() {
+    if (this._coverStream) {
+      try {
+        this._coverStream.getTracks().forEach((track) => track.stop());
+      } catch (err) {
+        console.error("Error stopping cover camera stream tracks", err);
+      }
+      this._coverStream = null;
+    }
+    const videoEl = this.$("#cover-camera-video");
+    if (videoEl) {
+      videoEl.srcObject = null;
+    }
+    const dialog = this.$("#cover-camera-dialog");
+    if (dialog) {
+      dialog.hidden = true;
+    }
+  }
+
+  _processCoverImageSource(imageSource, sourceKind = "file") {
+    this._lastCoverSource = sourceKind;
+
+    const processImg = (img) => {
+      let width = img.width;
+      let height = img.height;
+      const maxDim = 800;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const resizedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
+      this._pendingCoverBase64 = resizedDataUrl.split(",")[1];
+
+      const previewImg = this.$("#cover-preview-img");
+      if (previewImg) {
+        previewImg.src = resizedDataUrl;
+      }
+
+      const previewDialog = this.$("#cover-preview-dialog");
+      if (previewDialog) {
+        previewDialog.hidden = false;
+      }
+    };
+
+    if (imageSource instanceof HTMLCanvasElement || imageSource instanceof HTMLImageElement) {
+      processImg(imageSource);
+    } else if (typeof imageSource === "string") {
+      const img = new Image();
+      img.onload = () => processImg(img);
+      img.src = imageSource;
     }
   }
 
@@ -857,11 +1018,7 @@ class LibraryTrackerPanel extends HTMLElement {
       coverContainer.setAttribute("aria-label", "Foto als Cover aufnehmen / ändern");
       coverContainer.setAttribute("role", "button");
       coverContainer.onclick = () => {
-        const coverFileInput = this.$("#cover-file-input");
-        if (coverFileInput) {
-          coverFileInput.value = "";
-          coverFileInput.click();
-        }
+        this._openCoverSourceDialog();
       };
       if (book.cover_url) {
         coverContainer.innerHTML = `<img src="${this._escapeHtml(book.cover_url)}" class="lt-book-detail__cover-img" alt="Cover" />`;
@@ -1621,7 +1778,64 @@ class LibraryTrackerPanel extends HTMLElement {
       }
     });
 
-    // Cover Photo Upload via Camera File Input
+    // Cover Source Dialog Listeners
+    const btnCloseCoverSource = this.$("#btn-close-cover-source");
+    if (btnCloseCoverSource) {
+      btnCloseCoverSource.addEventListener("click", () => this._closeCoverSourceDialog());
+    }
+
+    const btnCoverSourceCamera = this.$("#btn-cover-source-camera");
+    if (btnCoverSourceCamera) {
+      btnCoverSourceCamera.addEventListener("click", () => {
+        this._closeCoverSourceDialog();
+        this._startCoverCamera();
+      });
+    }
+
+    const btnCoverSourceGallery = this.$("#btn-cover-source-gallery");
+    if (btnCoverSourceGallery) {
+      btnCoverSourceGallery.addEventListener("click", () => {
+        this._closeCoverSourceDialog();
+        const coverFileInput = this.$("#cover-file-input");
+        if (coverFileInput) {
+          coverFileInput.value = "";
+          coverFileInput.click();
+        }
+      });
+    }
+
+    // Cover Camera Overlay Controls
+    const btnCloseCoverCamera = this.$("#btn-close-cover-camera");
+    if (btnCloseCoverCamera) {
+      btnCloseCoverCamera.addEventListener("click", () => this._stopCoverCamera());
+    }
+
+    const btnCoverCameraCancel = this.$("#btn-cover-camera-cancel");
+    if (btnCoverCameraCancel) {
+      btnCoverCameraCancel.addEventListener("click", () => this._stopCoverCamera());
+    }
+
+    const btnCoverCameraSnap = this.$("#btn-cover-camera-snap");
+    if (btnCoverCameraSnap) {
+      btnCoverCameraSnap.addEventListener("click", () => {
+        const videoEl = this.$("#cover-camera-video");
+        if (!videoEl || !videoEl.videoWidth || !videoEl.videoHeight) {
+          this._showToast("Kamera noch nicht bereit.", true);
+          return;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+
+        this._stopCoverCamera();
+        this._processCoverImageSource(canvas, "camera");
+      });
+    }
+
+    // Cover Photo Upload via File Input
     const coverFileInput = this.$("#cover-file-input");
     if (coverFileInput) {
       coverFileInput.addEventListener("change", (e) => {
@@ -1630,41 +1844,7 @@ class LibraryTrackerPanel extends HTMLElement {
 
         const reader = new FileReader();
         reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-            const maxDim = 800;
-            if (width > maxDim || height > maxDim) {
-              if (width > height) {
-                height = Math.round((height * maxDim) / width);
-                width = maxDim;
-              } else {
-                width = Math.round((width * maxDim) / height);
-                height = maxDim;
-              }
-            }
-
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, width, height);
-
-            const resizedDataUrl = canvas.toDataURL("image/jpeg", 0.8);
-            this._pendingCoverBase64 = resizedDataUrl.split(",")[1];
-
-            const previewImg = this.$("#cover-preview-img");
-            if (previewImg) {
-              previewImg.src = resizedDataUrl;
-            }
-
-            const previewDialog = this.$("#cover-preview-dialog");
-            if (previewDialog) {
-              previewDialog.hidden = false;
-            }
-          };
-          img.src = event.target.result;
+          this._processCoverImageSource(event.target.result, "file");
         };
         reader.readAsDataURL(file);
       });
@@ -1682,9 +1862,16 @@ class LibraryTrackerPanel extends HTMLElement {
     const btnCoverRetake = this.$("#btn-cover-retake");
     if (btnCoverRetake) {
       btnCoverRetake.addEventListener("click", () => {
-        if (coverFileInput) {
-          coverFileInput.value = "";
-          coverFileInput.click();
+        const previewDialog = this.$("#cover-preview-dialog");
+        if (previewDialog) previewDialog.hidden = true;
+
+        if (this._lastCoverSource === "camera") {
+          this._startCoverCamera();
+        } else {
+          if (coverFileInput) {
+            coverFileInput.value = "";
+            coverFileInput.click();
+          }
         }
       });
     }
