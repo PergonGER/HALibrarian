@@ -1005,8 +1005,14 @@ class LibraryTrackerPanel extends HTMLElement {
             book_id: book.id,
             status: "gelesen",
           });
-          this._showToast(`"${book.title}" als gelesen markiert.`);
-          this._closeBookDetailDialog();
+          // Keep the dialog open (re-render in place) instead of closing
+          // it, so the rating stars right below - already interactive,
+          // see #detail-rating-stars above - are immediately visible to
+          // optionally rate the book now. Closing it (the "X" button is
+          // still right there) skips rating entirely, nothing is forced.
+          book.status = "gelesen";
+          this._openBookDetailDialog(book);
+          this._showToast(`"${book.title}" als gelesen markiert — jetzt bewerten?`);
           this._loadBooks();
         } catch (err) {
           this._showToast("Fehler beim Aktualisieren: " + (err.message || err), true);
