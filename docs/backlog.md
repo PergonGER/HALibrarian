@@ -7,6 +7,14 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Nach "Gelesen"-Markierung optional zur Bewertung einladen~~ —
+  umgesetzt 2026-10-11 (v0.16.1, direkter Fix, kein Jules-Issue —
+  Detail-Popup hatte bereits ein interaktives Sterne-Rating, nur der
+  Button schloss das Popup vorher sofort): "✓ Gelesen"-Button im
+  Detail-Popup schließt den Dialog nicht mehr automatisch, sondern
+  rendert ihn mit aktualisiertem Status neu — die bereits vorhandenen
+  Bewertungssterne sind damit sofort sichtbar/bedienbar, Schließen
+  bleibt jederzeit möglich (keine Pflicht).
 - ~~Eigenes Foto als Buch-Cover aufnehmen~~ — umgesetzt 2026-10-11 via
   Jules-PR #36 (Issue #34, v0.16.0): Klick auf das Cover im
   Detail-Popup öffnet die Kamera (`<input type="file" capture=
