@@ -499,6 +499,8 @@ class LibraryTrackerPanel extends HTMLElement {
   }
 
   async _startCoverCamera() {
+    this._stopCoverCamera();
+
     const dialog = this.$("#cover-camera-dialog");
     const errorEl = this.$("#cover-camera-error");
     const videoEl = this.$("#cover-camera-video");
@@ -511,8 +513,6 @@ class LibraryTrackerPanel extends HTMLElement {
     if (dialog) {
       dialog.hidden = false;
     }
-
-    this._stopCoverCamera();
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
