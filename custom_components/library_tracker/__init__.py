@@ -72,10 +72,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         domain_data["covers_registered"] = True
 
     # Register periodic author releases check
-    raw_interval = None
-    if isinstance(entry.options, dict):
-        raw_interval = entry.options.get(CONF_AUTHOR_CHECK_INTERVAL)
-    if raw_interval is None and isinstance(entry.data, dict):
+    raw_interval = entry.options.get(CONF_AUTHOR_CHECK_INTERVAL)
+    if raw_interval is None:
         raw_interval = entry.data.get(CONF_AUTHOR_CHECK_INTERVAL)
 
     try:
@@ -89,7 +87,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_check = async_track_time_interval(
         hass, _scheduled_author_check, timedelta(hours=interval_hours)
     )
-    entry.async_on_unload(unsub_check)
 
     domain_data[entry.entry_id] = {
         "entry": entry,
