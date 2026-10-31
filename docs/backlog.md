@@ -7,6 +7,29 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Automatischer Check auf neue Bücher favorisierter Autoren~~ —
+  umgesetzt 2026-10-31 via Jules-PR #40 (Issue #39, v0.18.0): Periodischer
+  Hintergrund-Job (`async_track_time_interval`, Intervall aus dem
+  bereits vorhandenen, bis dahin ungenutzten `CONF_AUTHOR_CHECK_INTERVAL`,
+  1–168h/einstellbar bis wöchentlich) prüft favorisierte Autoren
+  (`Authors.is_favorite`) über Google-Books-`inauthor:`-Suche mit
+  Open-Library-Fallback auf neue Titel. Dedup gegen die eigene
+  Bibliothek über das bestehende `find_duplicate_books()`-Kriterium
+  (ISBN, sonst Titel+Autor) sowie gegen bereits gemeldete Titel (neue
+  Tabelle `AuthorReleaseNotifications`), damit dasselbe neue Buch nicht
+  bei jedem Lauf erneut gemeldet wird. Benachrichtigung über den
+  konfigurierten `notify_service`; keine automatische Übernahme ins
+  Regal (bewusste Nutzerentscheidung bei der Spezifikation). Beim
+  Review zwei reale Bugs gefunden und direkt selbst gefixt: (1)
+  `isinstance(entry.options, dict)`/`isinstance(entry.data, dict)` ist
+  in echtem Home Assistant immer `False` (beide sind `MappingProxyType`,
+  kein `dict`) — das konfigurierte Intervall wurde dadurch nie gelesen,
+  der Job lief immer mit dem 24h-Default, unabhängig von der
+  Nutzereinstellung; nur in Jules' eigenen Tests (echte `dict`-Mocks)
+  fiel das nicht auf. (2) `entry.async_on_unload(unsub_check)` zusätzlich
+  zum bereits vorhandenen manuellen Unsub-Aufruf in `async_unload_entry`
+  hätte den Interval-Timer beim Entladen doppelt abgemeldet — doppelte
+  Registrierung entfernt.
 - ~~HACS zeigte keinen Changelog beim Update an~~ — gefixt 2026-10-31
   (direkter Fix, kein Jules-Issue, kein Versions-Bump — reine
   HACS-Katalog-Metadatenänderung, kein Integrationscode): Nutzer
