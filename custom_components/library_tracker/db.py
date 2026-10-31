@@ -85,10 +85,26 @@ class LibraryTrackerDatabase:
             )
 
             cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS AuthorReleaseNotifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    author_id INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    isbn TEXT,
+                    notified_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    FOREIGN KEY (author_id) REFERENCES Authors(id) ON DELETE CASCADE
+                );
+                """
+            )
+
+            cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_books_status ON Books(status);"
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_books_author ON Books(author_id);"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_author_release_notifications_author_title ON AuthorReleaseNotifications(author_id, title);"
             )
             conn.commit()
 
@@ -488,6 +504,61 @@ class LibraryTrackerDatabase:
                 if row
                 else None
             )
+
+    def get_favorite_authors(self) -> list[dict[str, Any]]:
+        """Retrieve all authors marked as favorite."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, name, is_favorite, rating
+                FROM Authors
+                WHERE is_favorite = 1
+                ORDER BY name ASC
+                """
+            )
+            rows = cursor.fetchall()
+            return [
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "is_favorite": bool(row["is_favorite"]),
+                    "rating": row["rating"],
+                }
+                for row in rows
+            ]
+
+    def has_author_notification(self, author_id: int, title: str) -> bool:
+        """Check if a notification has already been recorded for author and title."""
+        clean_title = title.strip().lower()
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT 1 FROM AuthorReleaseNotifications
+                WHERE author_id = ? AND LOWER(TRIM(title)) = ?
+                LIMIT 1
+                """,
+                (author_id, clean_title),
+            )
+            return cursor.fetchone() is not None
+
+    def record_author_notification(
+        self, author_id: int, title: str, isbn: str | None = None
+    ) -> None:
+        """Record that a notification for an author's book has been sent."""
+        clean_title = title.strip()
+        clean_isbn = isbn.strip() if isbn else None
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO AuthorReleaseNotifications (author_id, title, isbn)
+                VALUES (?, ?, ?)
+                """,
+                (author_id, clean_title, clean_isbn),
+            )
+            conn.commit()
 
     def set_author_rating(
         self, author_id: int, rating: int | None

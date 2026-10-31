@@ -30,6 +30,7 @@ def test_init_db(db: LibraryTrackerDatabase) -> None:
     assert "Authors" in tables
     assert "Books" in tables
     assert "Releases" in tables
+    assert "AuthorReleaseNotifications" in tables
 
 
 def test_add_and_get_book(db: LibraryTrackerDatabase) -> None:
@@ -392,3 +393,36 @@ def test_migration_existing_authors_table() -> None:
         database.init_db()
         authors_again = database.get_authors()
         assert len(authors_again) == 1
+
+
+def test_author_notifications_and_favorites(db: LibraryTrackerDatabase) -> None:
+    """Test get_favorite_authors, has_author_notification, and record_author_notification."""
+    # Add authors
+    db.add_book(isbn="111", title="Book 1", author_name="Author One", status="gelesen")
+    db.add_book(isbn="222", title="Book 2", author_name="Author Two", status="gelesen")
+
+    authors = db.get_authors()
+    a1 = [a for a in authors if a["name"] == "Author One"][0]
+    a2 = [a for a in authors if a["name"] == "Author Two"][0]
+
+    # No favorites initially
+    assert db.get_favorite_authors() == []
+
+    # Mark Author One as favorite
+    db.set_author_favorite(a1["id"], True)
+    favs = db.get_favorite_authors()
+    assert len(favs) == 1
+    assert favs[0]["name"] == "Author One"
+
+    # Notification checks
+    assert db.has_author_notification(a1["id"], "New Release Title") is False
+
+    # Record notification
+    db.record_author_notification(a1["id"], "New Release Title", "9781234567890")
+
+    # Now has_author_notification should be True (case-insensitive & trimmed)
+    assert db.has_author_notification(a1["id"], "New Release Title") is True
+    assert db.has_author_notification(a1["id"], "  new release title  ") is True
+    # Different author or title should still be False
+    assert db.has_author_notification(a2["id"], "New Release Title") is False
+    assert db.has_author_notification(a1["id"], "Different Title") is False
