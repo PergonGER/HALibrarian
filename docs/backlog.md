@@ -7,6 +7,36 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~HACS zeigte keinen Changelog beim Update an~~ — gefixt 2026-10-31
+  (direkter Fix, kein Jules-Issue, kein Versions-Bump — reine
+  HACS-Katalog-Metadatenänderung, kein Integrationscode): Nutzer
+  meldete, dass die Repository-Infoseite in HACS keine Release-Notes
+  zeigt. Root Cause per Screenshot bestätigt: `hacs.json` hatte
+  `render_readme: true` gesetzt, wodurch HACS dort bewusst das README
+  statt der automatisch generierten Ansicht (inkl. Changelog-/Release-
+  Infos) anzeigt — die GitHub-Releases selbst enthalten durchgehend
+  echte Inhalte (`--generate-notes` via `.github/workflows/release.yml`
+  seit v0.2.0). `render_readme` entfernt (Default ist `false`); README
+  bleibt über die GitHub-Repo-Seite weiterhin einsehbar.
+- ~~Live-Kamera-Stream für Buch-Cover-Foto in der HA Companion App~~ —
+  umgesetzt 2026-10-11 via Jules-PR #38 (Issue #37, v0.17.0): Nutzer
+  meldete nach v0.16.0, dass `<input type="file" capture="environment">`
+  im normalen Browser die Kamera öffnet, in der HA Companion App aber
+  nur die Galerie-Auswahl anbietet — bestätigt per Browser-vs-App-
+  Vergleichstest, echte WebView-Einschränkung der App, kein Bug. Auf
+  explizite Nutzerentscheidung hin per Issue #37 einen Live-Kamera-Weg
+  nachgerüstet, der denselben bereits bewährten `getUserMedia({ video:
+  { facingMode: "environment" } })`-Mechanismus des ISBN-Scanners
+  wiederverwendet. Klick auf das Cover öffnet jetzt eine Auswahl
+  "📷 Kamera" / "🖼️ Aus Galerie wählen"; die Kamera-Option zeigt eine
+  Live-Vorschau mit Schnappschuss-Button, die bisherige
+  Resize/Komprimierungs-Pipeline (max. 800px, JPEG 0.8) wurde in eine
+  gemeinsame Funktion extrahiert und von Datei- und Kamera-Pfad geteilt.
+  Beim Review direkt selbst gefixt: `_startCoverCamera()` zeigte den
+  Dialog vor dem defensiven `_stopCoverCamera()`-Aufruf an, der am Ende
+  `dialog.hidden` wieder auf `true` setzt — das Kamera-Overlay (inkl.
+  Fehlermeldungen) wurde dadurch nie tatsächlich sichtbar. Reihenfolge
+  getauscht, sodass der Cleanup vor dem Öffnen läuft.
 - ~~Nach "Gelesen"-Markierung optional zur Bewertung einladen~~ —
   umgesetzt 2026-10-11 (v0.16.1, direkter Fix, kein Jules-Issue —
   Detail-Popup hatte bereits ein interaktives Sterne-Rating, nur der
