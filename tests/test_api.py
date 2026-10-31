@@ -8,6 +8,7 @@ import pytest
 from custom_components.library_tracker.api import (
     async_find_cover_url,
     async_lookup_isbn,
+    async_search_books_by_author,
     async_search_books_by_text,
     clean_isbn,
 )
@@ -562,3 +563,91 @@ async def test_async_ai_lookup_series_error() -> None:
         with pytest.raises(RuntimeError) as exc_info:
             await async_ai_lookup_series(mock_hass, "Some Title", "Some Author")
         assert "KI-Serien-Suche fehlgeschlagen" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_async_search_books_by_author_google_success() -> None:
+    """Test search books by author via Google Books API."""
+    mock_hass = MagicMock()
+    mock_session = MagicMock()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.json = AsyncMock(
+        return_value={
+            "totalItems": 1,
+            "items": [
+                {
+                    "volumeInfo": {
+                        "title": "Mistborn",
+                        "authors": ["Brandon Sanderson"],
+                        "publishedDate": "2006",
+                        "industryIdentifiers": [
+                            {"type": "ISBN_13", "identifier": "9780765311788"}
+                        ],
+                    }
+                }
+            ],
+        }
+    )
+    cm = AsyncMock()
+    cm.__aenter__.return_value = mock_resp
+    mock_session.get.return_value = cm
+
+    results = await async_search_books_by_author(
+        mock_hass, mock_session, "Brandon Sanderson", api_key="my_key"
+    )
+
+    assert len(results) == 1
+    assert results[0]["title"] == "Mistborn"
+    assert results[0]["author"] == "Brandon Sanderson"
+    assert results[0]["isbn"] == "9780765311788"
+    assert results[0]["source"] == "google_books"
+    assert 'q=inauthor:"Brandon%20Sanderson"' in mock_session.get.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_async_search_books_by_author_fallback_to_open_library() -> None:
+    """Test search books by author falling back to Open Library."""
+    mock_hass = MagicMock()
+    mock_session = MagicMock()
+
+    # Google Books returns 0 results
+    google_resp = AsyncMock()
+    google_resp.status = 200
+    google_resp.json = AsyncMock(return_value={"totalItems": 0, "items": []})
+    google_cm = AsyncMock()
+    google_cm.__aenter__.return_value = google_resp
+
+    # Open Library returns docs
+    ol_resp = AsyncMock()
+    ol_resp.status = 200
+    ol_resp.json = AsyncMock(
+        return_value={
+            "docs": [
+                {
+                    "title": "The Final Empire",
+                    "author_name": ["Brandon Sanderson"],
+                    "first_publish_year": 2006,
+                    "isbn": ["9780765311788"],
+                    "cover_i": 14658160,
+                }
+            ]
+        }
+    )
+    ol_cm = AsyncMock()
+    ol_cm.__aenter__.return_value = ol_resp
+
+    mock_session.get.side_effect = [google_cm, ol_cm]
+
+    results = await async_search_books_by_author(
+        mock_hass, mock_session, "Brandon Sanderson"
+    )
+
+    assert len(results) == 1
+    assert results[0]["title"] == "The Final Empire"
+    assert results[0]["author"] == "Brandon Sanderson"
+    assert results[0]["isbn"] == "9780765311788"
+    assert results[0]["cover_url"] == "https://covers.openlibrary.org/b/id/14658160-L.jpg"
+    assert results[0]["source"] == "open_library"
+    assert "openlibrary.org/search.json" in mock_session.get.call_args_list[1][0][0]

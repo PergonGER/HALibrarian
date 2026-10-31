@@ -99,10 +99,13 @@ async def test_async_setup_entry_registers_covers_static_path() -> None:
 
         mock_entry = MagicMock()
         mock_entry.entry_id = "test_entry"
+        mock_entry.options = {}
+        mock_entry.data = {}
         mock_entry.add_update_listener = MagicMock()
 
         with (
             patch("custom_components.library_tracker.LibraryTrackerDatabase") as mock_db_cls,
+            patch("custom_components.library_tracker.async_track_time_interval") as mock_track_time,
             patch("custom_components.library_tracker.async_register_websocket_commands"),
             patch("custom_components.library_tracker._async_register_panel"),
         ):

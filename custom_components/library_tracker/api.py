@@ -257,6 +257,194 @@ async def async_search_books_by_text(
         return []
 
 
+def _parse_open_library_doc(doc: dict[str, Any]) -> dict[str, Any] | None:
+    """Parse a single search doc from Open Library Search API response.
+
+    Verified against real Open Library API response structure:
+    - title: str
+    - author_name: list[str]
+    - first_publish_year: int
+    - publish_date: list[str]
+    - isbn: list[str] (only present when requested via fields parameter)
+    - cover_i: int -> https://covers.openlibrary.org/b/id/{cover_i}-L.jpg
+    """
+    if not isinstance(doc, dict):
+        return None
+
+    title = str(doc.get("title", "")).strip()
+    if not title:
+        return None
+
+    authors_list = doc.get("author_name")
+    if isinstance(authors_list, list) and authors_list:
+        author = ", ".join(str(a) for a in authors_list if a)
+    else:
+        author = "Unbekannter Autor"
+
+    published_date = ""
+    publish_dates = doc.get("publish_date")
+    if isinstance(publish_dates, list) and publish_dates:
+        published_date = str(publish_dates[0])
+    elif doc.get("first_publish_year"):
+        published_date = str(doc.get("first_publish_year"))
+
+    isbn = ""
+    isbns = doc.get("isbn")
+    if isinstance(isbns, list) and isbns:
+        # Prefer ISBN-13 if present
+        for candidate in isbns:
+            cleaned = clean_isbn(str(candidate))
+            if len(cleaned) == 13:
+                isbn = cleaned
+                break
+        if not isbn and isbns:
+            isbn = clean_isbn(str(isbns[0]))
+
+    cover_url = ""
+    cover_i = doc.get("cover_i")
+    if cover_i:
+        cover_url = f"https://covers.openlibrary.org/b/id/{cover_i}-L.jpg"
+
+    return {
+        "isbn": isbn,
+        "title": title,
+        "author": author,
+        "published_date": published_date,
+        "cover_url": cover_url,
+        "source": "open_library",
+    }
+
+
+async def _async_query_open_library_by_author(
+    session: Any, author_name: str
+) -> list[dict[str, Any]]:
+    """Search Open Library for books by an author.
+
+    Uses Open Library Search API:
+    https://openlibrary.org/search.json?author={author}&fields=title,author_name,first_publish_year,publish_date,isbn,cover_i&limit=20
+    Verified against real Open Library API: specifying `fields` ensures `isbn` is included in the doc.
+    """
+    clean_name = author_name.strip()
+    if not clean_name:
+        return []
+
+    url = (
+        f"https://openlibrary.org/search.json?author={quote(clean_name)}"
+        f"&fields=title,author_name,first_publish_year,publish_date,isbn,cover_i&limit=20"
+    )
+
+    try:
+        async with asyncio.timeout(REQUEST_TIMEOUT):
+            async with session.get(url) as response:
+                if response.status != 200:
+                    _LOGGER.debug(
+                        "Open Library author search returned status %s for author %s",
+                        response.status,
+                        clean_name,
+                    )
+                    return []
+                data = await response.json()
+
+        docs = data.get("docs", [])
+        if not docs or not isinstance(docs, list):
+            return []
+
+        results: list[dict[str, Any]] = []
+        for doc in docs:
+            parsed = _parse_open_library_doc(doc)
+            if parsed:
+                results.append(parsed)
+
+        return results
+    except (ClientError, asyncio.TimeoutError) as err:
+        _LOGGER.debug("Error querying Open Library for author %s: %s", clean_name, err)
+        return []
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception(
+            "Unexpected error querying Open Library for author %s", clean_name
+        )
+        return []
+
+
+async def async_search_books_by_author(
+    hass: HomeAssistant,
+    session: Any,
+    author_name: str,
+    api_key: str | None = None,
+) -> list[dict[str, Any]]:
+    """Search for books by author using Google Books with fallback to Open Library.
+
+    Google Books query: q=inauthor:"{author_name}" with retries for 503/429.
+    Fallback: Open Library search API.
+    Returns a list of dicts with {isbn, title, author, published_date, cover_url, source}.
+    """
+    clean_name = author_name.strip()
+    if not clean_name:
+        return []
+
+    # 1. Try Google Books API with inauthor:"{author_name}"
+    url = f'https://www.googleapis.com/books/v1/volumes?q=inauthor:"{quote(clean_name)}"&maxResults=20'
+    if api_key:
+        url += f"&key={api_key}"
+
+    google_results: list[dict[str, Any]] = []
+    google_success = False
+
+    try:
+        data = None
+        for attempt in range(3):
+            async with asyncio.timeout(REQUEST_TIMEOUT):
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        google_success = True
+                        break
+                    if response.status in (503, 429) and attempt < 2:
+                        _LOGGER.debug(
+                            "Google Books API returned status %s for author "
+                            "%s - retrying (attempt %s/3)",
+                            response.status,
+                            clean_name,
+                            attempt + 1,
+                        )
+                        await asyncio.sleep(1 * (attempt + 1))
+                        continue
+                    _LOGGER.debug(
+                        "Google Books API returned status %s for author %s",
+                        response.status,
+                        clean_name,
+                    )
+                    break
+
+        if google_success and data:
+            items = data.get("items", [])
+            if isinstance(items, list) and items:
+                for item in items:
+                    parsed = _parse_google_book_item(item)
+                    if parsed:
+                        google_results.append(parsed)
+
+    except (ClientError, asyncio.TimeoutError) as err:
+        _LOGGER.debug(
+            "Error querying Google Books API for author %s: %s", clean_name, err
+        )
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception(
+            "Unexpected error querying Google Books API for author %s", clean_name
+        )
+
+    if google_results:
+        return google_results
+
+    _LOGGER.info(
+        "Google Books returned no matches or failed for author %s. Falling back to Open Library.",
+        clean_name,
+    )
+
+    # 2. Fallback to Open Library
+    return await _async_query_open_library_by_author(session, clean_name)
+
+
 async def _async_query_google_books(
     session: Any, isbn: str, api_key: str | None, require_isbn_match: bool = True
 ) -> dict[str, Any] | None:

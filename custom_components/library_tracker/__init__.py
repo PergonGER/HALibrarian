@@ -14,10 +14,21 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
 
+from datetime import datetime, timedelta
+
+from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_interval
+
+from .api import async_search_books_by_author
 from .const import (
+    CONF_AUTHOR_CHECK_INTERVAL,
+    CONF_GOOGLE_BOOKS_API_KEY,
+    CONF_NOTIFY_SERVICE,
     COVERS_DIR_NAME,
     COVERS_URL_BASE,
     DB_FILENAME,
+    DEFAULT_AUTHOR_CHECK_INTERVAL,
     DOMAIN,
     PANEL_ICON,
     PANEL_TITLE,
@@ -60,7 +71,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         domain_data["covers_registered"] = True
 
-    domain_data[entry.entry_id] = {"entry": entry}
+    # Register periodic author releases check
+    raw_interval = None
+    if isinstance(entry.options, dict):
+        raw_interval = entry.options.get(CONF_AUTHOR_CHECK_INTERVAL)
+    if raw_interval is None and isinstance(entry.data, dict):
+        raw_interval = entry.data.get(CONF_AUTHOR_CHECK_INTERVAL)
+
+    try:
+        interval_hours = int(raw_interval) if raw_interval is not None else DEFAULT_AUTHOR_CHECK_INTERVAL
+    except (TypeError, ValueError):
+        interval_hours = DEFAULT_AUTHOR_CHECK_INTERVAL
+
+    async def _scheduled_author_check(now: datetime | None = None) -> None:
+        await async_check_author_releases(hass, entry)
+
+    unsub_check = async_track_time_interval(
+        hass, _scheduled_author_check, timedelta(hours=interval_hours)
+    )
+    entry.async_on_unload(unsub_check)
+
+    domain_data[entry.entry_id] = {
+        "entry": entry,
+        "unsub_author_check": unsub_check,
+    }
 
     # Register WebSocket commands
     async_register_websocket_commands(hass)
@@ -76,7 +110,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     domain_data = hass.data.get(DOMAIN, {})
-    domain_data.pop(entry.entry_id, None)
+    entry_data = domain_data.pop(entry.entry_id, None)
+    if entry_data and "unsub_author_check" in entry_data:
+        entry_data["unsub_author_check"]()
 
     # Only clean up panel and database reference once no config entries are left.
     remaining_entries = [
@@ -90,6 +126,106 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         domain_data.pop("panel_registered", None)
 
     return True
+
+
+async def async_check_author_releases(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Check for new books by favorite authors and send notifications."""
+    domain_data = hass.data.get(DOMAIN, {})
+    db: LibraryTrackerDatabase | None = domain_data.get("db")
+    if db is None:
+        _LOGGER.warning("Database not available for author releases check")
+        return
+
+    favorite_authors = await hass.async_add_executor_job(db.get_favorite_authors)
+    if not favorite_authors:
+        _LOGGER.debug("No favorite authors found to check for new releases")
+        return
+
+    notify_service = entry.options.get(
+        CONF_NOTIFY_SERVICE,
+        entry.data.get(CONF_NOTIFY_SERVICE, "notify.notify"),
+    )
+    api_key = entry.options.get(
+        CONF_GOOGLE_BOOKS_API_KEY,
+        entry.data.get(CONF_GOOGLE_BOOKS_API_KEY, ""),
+    ) or None
+
+    session = async_get_clientsession(hass)
+
+    for author_info in favorite_authors:
+        author_id = author_info["id"]
+        author_name = author_info["name"]
+
+        try:
+            found_books = await async_search_books_by_author(
+                hass, session, author_name, api_key
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("Failed to search books for author %s", author_name)
+            continue
+
+        for book in found_books:
+            title = book.get("title", "").strip()
+            isbn = book.get("isbn", "").strip()
+            if not title:
+                continue
+
+            # 1. Dedup against existing books in library
+            # Find duplicate using the existing find_duplicate_books method
+            is_in_library = await hass.async_add_executor_job(
+                lambda b_isbn=isbn, b_title=title, b_author=author_name: bool(
+                    db.find_duplicate_books(b_isbn, b_title, b_author)
+                )
+            )
+            if is_in_library:
+                continue
+
+            # 2. Check if user was already notified
+            already_notified = await hass.async_add_executor_job(
+                db.has_author_notification, author_id, title
+            )
+            if already_notified:
+                continue
+
+            # 3. Send notification
+            published_date = book.get("published_date", "")
+            date_info = f" ({published_date})" if published_date else ""
+            msg = f"Neues Buch von {author_name}: „{title}“{date_info}"
+            alert_title = f"Neues Buch von {author_name}"
+
+            if "." in notify_service:
+                domain, service = notify_service.split(".", 1)
+            else:
+                domain, service = "notify", notify_service
+
+            try:
+                await hass.services.async_call(
+                    domain,
+                    service,
+                    {"title": alert_title, "message": msg},
+                    blocking=True,
+                )
+            except ServiceNotFound:
+                _LOGGER.error("Configured notify service '%s' not found", notify_service)
+            except HomeAssistantError as err:
+                _LOGGER.error("Error calling notify service '%s': %s", notify_service, err)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception(
+                    "Unexpected error notifying for new book '%s' by '%s'",
+                    title,
+                    author_name,
+                )
+
+            # Record notification in DB so we don't alert again
+            try:
+                await hass.async_add_executor_job(
+                    db.record_author_notification, author_id, title, isbn or None
+                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception(
+                    "Failed to record author release notification in database for '%s'",
+                    title,
+                )
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
