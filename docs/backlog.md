@@ -7,6 +7,17 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~HACS zeigte keinen Changelog beim Update an~~ — gefixt 2026-10-31
+  (direkter Fix, kein Jules-Issue, kein Versions-Bump — reine
+  HACS-Katalog-Metadatenänderung, kein Integrationscode): Nutzer
+  meldete, dass die Repository-Infoseite in HACS keine Release-Notes
+  zeigt. Root Cause per Screenshot bestätigt: `hacs.json` hatte
+  `render_readme: true` gesetzt, wodurch HACS dort bewusst das README
+  statt der automatisch generierten Ansicht (inkl. Changelog-/Release-
+  Infos) anzeigt — die GitHub-Releases selbst enthalten durchgehend
+  echte Inhalte (`--generate-notes` via `.github/workflows/release.yml`
+  seit v0.2.0). `render_readme` entfernt (Default ist `false`); README
+  bleibt über die GitHub-Repo-Seite weiterhin einsehbar.
 - ~~Live-Kamera-Stream für Buch-Cover-Foto in der HA Companion App~~ —
   umgesetzt 2026-10-11 via Jules-PR #38 (Issue #37, v0.17.0): Nutzer
   meldete nach v0.16.0, dass `<input type="file" capture="environment">`
