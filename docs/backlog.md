@@ -275,15 +275,6 @@ nur eine Merkliste, damit nichts verloren geht.
   durch zwei offene Tabs oder ein erneutes Laden ohne vollen Seiten-
   Reload). Kein bekannter funktionaler Schaden bisher beobachtet, aber
   noch nicht root-caused.
-- **Bücherliste alphabetisch sortierbar** (Nutzerwunsch 2026-09-29):
-  Die Hauptliste im Bücher-Tab ist aktuell fest nach `id DESC` sortiert
-  (neueste zuerst, `db.get_books()`/`get_duplicate_books()`/
-  `get_books_by_series()` in `db.py`, `ORDER BY b.id DESC`). Gewünscht:
-  Sortierung alphabetisch nach Titel als Option. Noch zu klären vor
-  einem Issue-Zuschnitt: feste Umstellung vs. Sortier-Umschalter (z. B.
-  Chip/Dropdown neben den Filtern) mit mehreren Optionen (Titel, Autor,
-  Erscheinungsdatum, hinzugefügt), und ob das nur die Bücherliste
-  betrifft oder auch Autorenliste/Duplikate-/Serien-Ansicht.
 - **Serien-seriesId-API-Einschränkung** (Ursprungs-Recherche vom
   2026-09-10, weiterhin relevant für Issue #12): kein Google-Books-API-
   Endpunkt, um nach allen Büchern einer `seriesId` zu suchen, keine
