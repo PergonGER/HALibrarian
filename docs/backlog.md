@@ -7,6 +7,24 @@ nur eine Merkliste, damit nichts verloren geht.
 
 ## Erledigt
 
+- ~~Autoren-Neuerscheinungen: Push-Benachrichtigung durch dauerhafte
+  Liste ersetzt~~ — umgesetzt 2026-11-18 via Issue #41, v0.19.0. Nutzer-
+  Feedback nach dem ersten Live-Einsatz von PR #40: Push-Benachrichtigung
+  störte, stattdessen gewünscht: dauerhafte Liste im Panel, die sich
+  selbst aufräumt, sobald das Buch normal erfasst wurde, plus manuelles
+  "Ignorieren". **Jules ist zweimal mit einem internen Fehler
+  abgebrochen** (2026-11-03 10:19 UTC direkt nach Start, nach einem
+  Retry-Kommentar am 2026-11-04 07:23 UTC keine Reaktion mehr — kein
+  bekanntes No-Op-/Revert-Muster wie sonst in diesem Repo, sondern ein
+  echter Ausführungsfehler bei Jules selbst) — direkt selbst umgesetzt,
+  Spezifikation aus Issue #41 unverändert. `async_check_author_releases()`
+  ruft `notify_service` nicht mehr auf, Hintergrund-Job/Scheduler
+  unverändert. Neue Spalte `AuthorReleaseNotifications.ignored`,
+  `db.get_author_release_recommendations()` gleicht gegen
+  `find_duplicate_books()` ab und löscht dabei gleich erledigte
+  Einträge (kein unbegrenztes Wachstum), `set_author_release_
+  notification_ignored()`. Neue WS-Commands `author_releases/list`
+  und `.../ignore`. Neuer Panel-Tab "🔔 Neu entdeckt" mit Zähler-Badge.
 - ~~Automatischer Check auf neue Bücher favorisierter Autoren~~ —
   umgesetzt 2026-10-31 via Jules-PR #40 (Issue #39, v0.18.0): Periodischer
   Hintergrund-Job (`async_track_time_interval`, Intervall aus dem
