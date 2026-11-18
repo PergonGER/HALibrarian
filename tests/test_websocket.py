@@ -15,6 +15,8 @@ from custom_components.library_tracker.const import DOMAIN
 from custom_components.library_tracker.db import LibraryTrackerDatabase
 from custom_components.library_tracker.websocket_api import (
     async_register_websocket_commands,
+    ws_author_releases_ignore,
+    ws_author_releases_list,
     ws_authors_list,
     ws_authors_set_favorite,
     ws_authors_set_rating,
@@ -60,7 +62,7 @@ def test_async_register_websocket_commands(mock_hass: HomeAssistant) -> None:
         "homeassistant.components.websocket_api.async_register_command"
     ) as mock_register:
         async_register_websocket_commands(mock_hass)
-        assert mock_register.call_count == 16
+        assert mock_register.call_count == 18
         assert mock_hass.data[DOMAIN]["ws_commands_registered"] is True
 
         # Second call should be a no-op
@@ -336,6 +338,62 @@ async def test_ws_authors_set_rating(mock_hass: HomeAssistant) -> None:
     )
     conn.send_error.assert_called_once()
     assert conn.send_error.call_args[0][1] == "invalid_format"
+
+
+@pytest.mark.asyncio
+async def test_ws_author_releases_list_and_ignore(mock_hass: HomeAssistant) -> None:
+    """Test listing and ignoring author release recommendations via WebSocket."""
+    db: LibraryTrackerDatabase = mock_hass.data[DOMAIN]["db"]
+    db.add_book(isbn="111", title="Book 1", author_name="Famous Author", status="gelesen")
+    author_id = db.get_authors()[0]["id"]
+    db.record_author_notification(author_id, "New Book", "222")
+
+    conn = MagicMock()
+
+    # List recommendations
+    await inspect.unwrap(ws_author_releases_list)(
+        mock_hass, conn, {"id": 1, "type": "library_tracker/author_releases/list"}
+    )
+    conn.send_result.assert_called_once()
+    recommendations = conn.send_result.call_args[0][1]
+    assert len(recommendations) == 1
+    assert recommendations[0]["title"] == "New Book"
+    notification_id = recommendations[0]["id"]
+
+    # Ignore it
+    conn.reset_mock()
+    await inspect.unwrap(ws_author_releases_ignore)(
+        mock_hass,
+        conn,
+        {
+            "id": 2,
+            "type": "library_tracker/author_releases/ignore",
+            "notification_id": notification_id,
+        },
+    )
+    conn.send_result.assert_called_once()
+    assert conn.send_result.call_args[0][1] == {"success": True}
+
+    # List again - should be empty now
+    conn.reset_mock()
+    await inspect.unwrap(ws_author_releases_list)(
+        mock_hass, conn, {"id": 3, "type": "library_tracker/author_releases/list"}
+    )
+    assert conn.send_result.call_args[0][1] == []
+
+    # Error case: unknown notification_id
+    conn.reset_mock()
+    await inspect.unwrap(ws_author_releases_ignore)(
+        mock_hass,
+        conn,
+        {
+            "id": 4,
+            "type": "library_tracker/author_releases/ignore",
+            "notification_id": notification_id + 999,
+        },
+    )
+    conn.send_error.assert_called_once()
+    assert conn.send_error.call_args[0][1] == "not_found"
 
 
 @pytest.mark.asyncio

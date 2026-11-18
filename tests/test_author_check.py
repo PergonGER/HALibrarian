@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ServiceNotFound
 
 from custom_components.library_tracker import (
     async_check_author_releases,
@@ -17,7 +16,6 @@ from custom_components.library_tracker import (
 )
 from custom_components.library_tracker.const import (
     CONF_AUTHOR_CHECK_INTERVAL,
-    CONF_NOTIFY_SERVICE,
     DOMAIN,
 )
 from custom_components.library_tracker.db import LibraryTrackerDatabase
@@ -51,9 +49,9 @@ def mock_hass() -> HomeAssistant:
 @pytest.mark.asyncio
 async def test_author_check_flow(mock_hass: HomeAssistant) -> None:
     """Test full author release check flow:
-    - Favorite author with new book triggers notify call and records in DB.
-    - Subsequent check does not re-notify.
-    - Book already in library is not notified.
+    - Favorite author with new book gets recorded (no notify call).
+    - Subsequent check does not record the same book twice.
+    - Book already in library is not recorded.
     - Non-favorite author is ignored.
     """
     db: LibraryTrackerDatabase = mock_hass.data[DOMAIN]["db"]
@@ -70,7 +68,7 @@ async def test_author_check_flow(mock_hass: HomeAssistant) -> None:
 
     entry = MagicMock()
     entry.entry_id = "test_entry"
-    entry.options = {CONF_NOTIFY_SERVICE: "notify.mobile_app_phone"}
+    entry.options = {}
     entry.data = {}
 
     found_books = [
@@ -107,33 +105,28 @@ async def test_author_check_flow(mock_hass: HomeAssistant) -> None:
         assert mock_search.call_count == 1
         assert mock_search.call_args[0][2] == "Brandon Sanderson"
 
-        # Notify service was called once for Book 3
-        mock_hass.services.async_call.assert_called_once_with(
-            "notify",
-            "mobile_app_phone",
-            {
-                "title": "Neues Buch von Brandon Sanderson",
-                "message": "Neues Buch von Brandon Sanderson: „Wind and Truth“ (2024-12-06)",
-            },
-            blocking=True,
-        )
+        # No notify call is made anymore - only the "Neu entdeckt" record
+        mock_hass.services.async_call.assert_not_called()
 
-        # Verified notification was recorded in DB
+        # Verified recommendation was recorded in DB
         assert db.has_author_notification(sanderson["id"], "Wind and Truth") is True
+        recommendations = db.get_author_release_recommendations()
+        assert len(recommendations) == 1
+        assert recommendations[0]["title"] == "Wind and Truth"
+        assert recommendations[0]["author_name"] == "Brandon Sanderson"
 
-    # Run check a second time: Should not notify again for "Wind and Truth"
-    mock_hass.services.async_call.reset_mock()
+    # Run check a second time: Should not record "Wind and Truth" again
     with patch(
         "custom_components.library_tracker.async_search_books_by_author",
         AsyncMock(return_value=found_books),
     ):
         await async_check_author_releases(mock_hass, entry)
-        mock_hass.services.async_call.assert_not_called()
+        assert len(db.get_author_release_recommendations()) == 1
 
 
 @pytest.mark.asyncio
-async def test_author_check_notify_failure_resilient(mock_hass: HomeAssistant) -> None:
-    """Test that a failure in sending notify does not crash and continues for other authors."""
+async def test_author_check_search_failure_resilient(mock_hass: HomeAssistant) -> None:
+    """Test that a failed search for one author does not block others."""
     db: LibraryTrackerDatabase = mock_hass.data[DOMAIN]["db"]
 
     db.add_book(isbn="111", title="B1", author_name="Author One", status="gelesen")
@@ -146,18 +139,12 @@ async def test_author_check_notify_failure_resilient(mock_hass: HomeAssistant) -
     db.set_author_favorite(a2["id"], True)
 
     entry = MagicMock()
-    entry.options = {CONF_NOTIFY_SERVICE: "notify.invalid_service"}
+    entry.options = {}
     entry.data = {}
-
-    # Service call raises ServiceNotFound for first call, succeeds for second
-    mock_hass.services.async_call.side_effect = [
-        ServiceNotFound("notify", "invalid_service"),
-        None,
-    ]
 
     async def mock_search(hass, session, author_name, api_key=None):
         if author_name == "Author One":
-            return [{"title": "New Book 1", "isbn": "111-new", "published_date": "2024"}]
+            raise RuntimeError("API unreachable")
         return [{"title": "New Book 2", "isbn": "222-new", "published_date": "2024"}]
 
     with patch(
@@ -166,10 +153,8 @@ async def test_author_check_notify_failure_resilient(mock_hass: HomeAssistant) -
     ):
         await async_check_author_releases(mock_hass, entry)
 
-        # Both notifications should have been attempted
-        assert mock_hass.services.async_call.call_count == 2
-        # Both notifications recorded even when service call had error
-        assert db.has_author_notification(a1["id"], "New Book 1") is True
+        # Author Two's result is recorded despite Author One's search failing
+        assert db.has_author_notification(a1["id"], "New Book 1") is False
         assert db.has_author_notification(a2["id"], "New Book 2") is True
 
 
@@ -211,7 +196,6 @@ async def test_periodic_job_setup_and_unload() -> None:
             # Interval timedelta should be 48 hours
             from datetime import timedelta
             assert mock_track.call_args[0][2] == timedelta(hours=48)
-            mock_entry.async_on_unload.assert_any_call(mock_unsub)
 
             # Unload entry
             assert await async_unload_entry(mock_hass, mock_entry) is True

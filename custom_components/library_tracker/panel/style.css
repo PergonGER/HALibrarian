@@ -149,6 +149,18 @@ body {
   color: #ffffff;
 }
 
+.lt-nav__badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  background: #e74c3c;
+  color: #ffffff;
+  vertical-align: middle;
+}
+
 .lt-version-badge {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.75);
@@ -631,6 +643,38 @@ body {
 
 .lt-fav-btn:hover {
   transform: scale(1.2);
+}
+
+/* Author Release Recommendations */
+.lt-releases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lt-release-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--lt-card-bg);
+  border: 1px solid var(--lt-divider);
+  border-radius: var(--lt-radius-md);
+}
+
+.lt-release-item__title {
+  font-weight: 500;
+}
+
+.lt-release-item__date {
+  font-weight: 400;
+  color: var(--lt-text-secondary);
+}
+
+.lt-release-item__author {
+  color: var(--lt-text-secondary);
+  font-size: 14px;
 }
 
 /* Scanner & Search */

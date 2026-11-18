@@ -106,6 +106,15 @@ class LibraryTrackerDatabase:
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_author_release_notifications_author_title ON AuthorReleaseNotifications(author_id, title);"
             )
+
+            # Migration: Ensure ignored column exists on AuthorReleaseNotifications table
+            cursor.execute("PRAGMA table_info(AuthorReleaseNotifications);")
+            arn_columns = {row["name"] for row in cursor.fetchall()}
+            if "ignored" not in arn_columns:
+                cursor.execute(
+                    "ALTER TABLE AuthorReleaseNotifications ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0;"
+                )
+
             conn.commit()
 
     def _get_or_create_author(self, conn: sqlite3.Connection, name: str) -> int:
@@ -559,6 +568,63 @@ class LibraryTrackerDatabase:
                 (author_id, clean_title, clean_isbn),
             )
             conn.commit()
+
+    def get_author_release_recommendations(self) -> list[dict[str, Any]]:
+        """Retrieve not-yet-ignored author release recommendations.
+
+        Rows whose book is meanwhile in the library (per
+        find_duplicate_books(), same criterion used at add-time: ISBN if
+        present, otherwise title+author case-insensitive) are deleted here
+        as a side effect - the user added the book the normal way, so
+        there's nothing left to recommend and the table would otherwise
+        grow unbounded.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT
+                    arn.id,
+                    arn.author_id,
+                    a.name AS author_name,
+                    arn.title,
+                    arn.isbn,
+                    arn.notified_at
+                FROM AuthorReleaseNotifications arn
+                JOIN Authors a ON arn.author_id = a.id
+                WHERE arn.ignored = 0
+                ORDER BY arn.notified_at DESC
+                """
+            )
+            rows = [dict(row) for row in cursor.fetchall()]
+
+            recommendations: list[dict[str, Any]] = []
+            stale_ids: list[int] = []
+            for row in rows:
+                if self.find_duplicate_books(row["isbn"], row["title"], row["author_name"]):
+                    stale_ids.append(row["id"])
+                else:
+                    recommendations.append(row)
+
+            if stale_ids:
+                cursor.executemany(
+                    "DELETE FROM AuthorReleaseNotifications WHERE id = ?",
+                    [(stale_id,) for stale_id in stale_ids],
+                )
+                conn.commit()
+
+            return recommendations
+
+    def set_author_release_notification_ignored(self, notification_id: int) -> bool:
+        """Mark an author release recommendation as ignored. Returns True if found."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE AuthorReleaseNotifications SET ignored = 1 WHERE id = ?",
+                (notification_id,),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
 
     def set_author_rating(
         self, author_id: int, rating: int | None

@@ -16,7 +16,6 @@ from homeassistant.loader import async_get_integration
 
 from datetime import datetime, timedelta
 
-from homeassistant.exceptions import HomeAssistantError, ServiceNotFound
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -24,7 +23,6 @@ from .api import async_search_books_by_author
 from .const import (
     CONF_AUTHOR_CHECK_INTERVAL,
     CONF_GOOGLE_BOOKS_API_KEY,
-    CONF_NOTIFY_SERVICE,
     COVERS_DIR_NAME,
     COVERS_URL_BASE,
     DB_FILENAME,
@@ -126,7 +124,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_check_author_releases(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Check for new books by favorite authors and send notifications."""
+    """Check for new books by favorite authors and record them for the "Neu entdeckt" list."""
     domain_data = hass.data.get(DOMAIN, {})
     db: LibraryTrackerDatabase | None = domain_data.get("db")
     if db is None:
@@ -138,10 +136,6 @@ async def async_check_author_releases(hass: HomeAssistant, entry: ConfigEntry) -
         _LOGGER.debug("No favorite authors found to check for new releases")
         return
 
-    notify_service = entry.options.get(
-        CONF_NOTIFY_SERVICE,
-        entry.data.get(CONF_NOTIFY_SERVICE, "notify.notify"),
-    )
     api_key = entry.options.get(
         CONF_GOOGLE_BOOKS_API_KEY,
         entry.data.get(CONF_GOOGLE_BOOKS_API_KEY, ""),
@@ -177,43 +171,14 @@ async def async_check_author_releases(hass: HomeAssistant, entry: ConfigEntry) -
             if is_in_library:
                 continue
 
-            # 2. Check if user was already notified
+            # 2. Check if this release was already recorded
             already_notified = await hass.async_add_executor_job(
                 db.has_author_notification, author_id, title
             )
             if already_notified:
                 continue
 
-            # 3. Send notification
-            published_date = book.get("published_date", "")
-            date_info = f" ({published_date})" if published_date else ""
-            msg = f"Neues Buch von {author_name}: „{title}“{date_info}"
-            alert_title = f"Neues Buch von {author_name}"
-
-            if "." in notify_service:
-                domain, service = notify_service.split(".", 1)
-            else:
-                domain, service = "notify", notify_service
-
-            try:
-                await hass.services.async_call(
-                    domain,
-                    service,
-                    {"title": alert_title, "message": msg},
-                    blocking=True,
-                )
-            except ServiceNotFound:
-                _LOGGER.error("Configured notify service '%s' not found", notify_service)
-            except HomeAssistantError as err:
-                _LOGGER.error("Error calling notify service '%s': %s", notify_service, err)
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception(
-                    "Unexpected error notifying for new book '%s' by '%s'",
-                    title,
-                    author_name,
-                )
-
-            # Record notification in DB so we don't alert again
+            # 3. Record it for the "Neu entdeckt" list (no push notification)
             try:
                 await hass.async_add_executor_job(
                     db.record_author_notification, author_id, title, isbn or None

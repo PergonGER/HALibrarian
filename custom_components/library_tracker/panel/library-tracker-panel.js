@@ -112,6 +112,7 @@ class LibraryTrackerPanel extends HTMLElement {
           <button class="lt-nav__btn lt-nav__btn--active" data-tab="tab-books">📚 Bücher</button>
           <button class="lt-nav__btn" data-tab="tab-authors">✍️ Autoren</button>
           <button class="lt-nav__btn" data-tab="tab-scanner">📷 ISBN-Scanner</button>
+          <button class="lt-nav__btn" data-tab="tab-releases">🔔 Neu entdeckt<span id="releases-badge" class="lt-nav__badge" hidden>0</span></button>
         </nav>
         <span class="lt-version-badge" id="version-badge" hidden></span>
         <button id="btn-open-settings" class="lt-icon-btn" title="Einstellungen" aria-label="Einstellungen">⚙️</button>
@@ -191,6 +192,17 @@ class LibraryTrackerPanel extends HTMLElement {
                 <button id="btn-manual-search" class="lt-btn lt-btn--primary">Suchen</button>
               </div>
               <div id="manual-search-results" class="lt-search-results" hidden style="margin-top: 12px;"></div>
+            </div>
+          </section>
+
+          <!-- TAB 4: AUTHOR RELEASE RECOMMENDATIONS -->
+          <section id="tab-releases" class="lt-tab-content" hidden>
+            <div class="lt-card">
+              <h2>Neu entdeckt</h2>
+              <p>Neue Bücher favorisierter Autoren, die noch nicht in deiner Bibliothek sind. Bücher verschwinden automatisch aus dieser Liste, sobald du sie ganz normal erfasst hast.</p>
+              <div id="releases-list" class="lt-releases-list">
+                <!-- Recommendations rendered dynamically -->
+              </div>
             </div>
           </section>
         </div>
@@ -436,6 +448,7 @@ class LibraryTrackerPanel extends HTMLElement {
     this._loadBooks();
     this._loadAuthors();
     this._loadVersion();
+    this._loadAuthorReleases();
   }
 
   _loadSettings() {
@@ -912,6 +925,84 @@ class LibraryTrackerPanel extends HTMLElement {
     } catch (err) {
       this._showToast("Fehler beim Laden der Autoren: " + (err.message || err), true);
     }
+  }
+
+  async _loadAuthorReleases() {
+    if (!this._hass) return;
+    try {
+      const recommendations = await this._hass.callWS({
+        type: "library_tracker/author_releases/list",
+      });
+      this._renderAuthorReleases(recommendations);
+    } catch (err) {
+      this._showToast(
+        "Fehler beim Laden der Neuerscheinungen: " + (err.message || err),
+        true
+      );
+    }
+  }
+
+  _renderAuthorReleases(recommendations) {
+    const container = this.$("#releases-list");
+    const badge = this.$("#releases-badge");
+    if (badge) {
+      if (recommendations && recommendations.length > 0) {
+        badge.textContent = String(recommendations.length);
+        badge.hidden = false;
+      } else {
+        badge.hidden = true;
+      }
+    }
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (!recommendations || recommendations.length === 0) {
+      container.innerHTML = `<p style="color: var(--lt-text-secondary);">Aktuell keine neuen Bücher favorisierter Autoren.</p>`;
+      return;
+    }
+
+    recommendations.forEach((rec) => {
+      const item = document.createElement("div");
+      item.className = "lt-release-item";
+
+      const dateInfo = rec.published_date
+        ? ` <span class="lt-release-item__date">(${this._escapeHtml(rec.published_date)})</span>`
+        : "";
+
+      item.innerHTML = `
+        <div class="lt-release-item__info">
+          <div class="lt-release-item__title">${this._escapeHtml(rec.title)}${dateInfo}</div>
+          <div class="lt-release-item__author">${this._escapeHtml(rec.author_name)}</div>
+        </div>
+        <button class="lt-btn lt-btn--secondary lt-btn--sm lt-release-item__ignore">Ignorieren</button>
+      `;
+
+      item.querySelector(".lt-release-item__ignore").addEventListener("click", async () => {
+        try {
+          await this._hass.callWS({
+            type: "library_tracker/author_releases/ignore",
+            notification_id: rec.id,
+          });
+          item.remove();
+          const remaining = container.querySelectorAll(".lt-release-item").length;
+          if (remaining === 0) {
+            container.innerHTML = `<p style="color: var(--lt-text-secondary);">Aktuell keine neuen Bücher favorisierter Autoren.</p>`;
+          }
+          const badgeEl = this.$("#releases-badge");
+          if (badgeEl) {
+            if (remaining > 0) {
+              badgeEl.textContent = String(remaining);
+            } else {
+              badgeEl.hidden = true;
+            }
+          }
+        } catch (err) {
+          this._showToast("Fehler beim Ignorieren: " + (err.message || err), true);
+        }
+      });
+
+      container.appendChild(item);
+    });
   }
 
   async _loadVersion() {
@@ -1543,6 +1634,9 @@ class LibraryTrackerPanel extends HTMLElement {
     });
     if (tabId !== "tab-scanner") {
       this._stopScanner();
+    }
+    if (tabId === "tab-releases") {
+      this._loadAuthorReleases();
     }
   }
 

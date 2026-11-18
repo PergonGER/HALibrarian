@@ -410,6 +410,56 @@ async def ws_authors_set_rating(
 
 @websocket_api.websocket_command(
     {
+        vol.Required("type"): "library_tracker/author_releases/list",
+    }
+)
+@websocket_api.async_response
+async def ws_author_releases_list(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """List not-yet-ignored author release recommendations."""
+    try:
+        db = _get_db(hass)
+        recommendations = await hass.async_add_executor_job(
+            db.get_author_release_recommendations
+        )
+        connection.send_result(msg["id"], recommendations)
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/author_releases/list: %s", err)
+        connection.send_error(msg["id"], "db_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "library_tracker/author_releases/ignore",
+        vol.Required("notification_id"): vol.Coerce(int),
+    }
+)
+@websocket_api.async_response
+async def ws_author_releases_ignore(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Mark an author release recommendation as ignored."""
+    try:
+        db = _get_db(hass)
+        found = await hass.async_add_executor_job(
+            db.set_author_release_notification_ignored, msg["notification_id"]
+        )
+        if not found:
+            connection.send_error(
+                msg["id"],
+                "not_found",
+                f"Recommendation with id {msg['notification_id']} not found",
+            )
+            return
+        connection.send_result(msg["id"], {"success": True})
+    except Exception as err:
+        _LOGGER.error("Error in library_tracker/author_releases/ignore: %s", err)
+        connection.send_error(msg["id"], "db_error", str(err))
+
+
+@websocket_api.websocket_command(
+    {
         vol.Required("type"): "library_tracker/lookup_isbn",
         vol.Required("isbn"): vol.All(cv.string, vol.Strip),
     }
@@ -680,6 +730,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_authors_list)
     websocket_api.async_register_command(hass, ws_authors_set_favorite)
     websocket_api.async_register_command(hass, ws_authors_set_rating)
+    websocket_api.async_register_command(hass, ws_author_releases_list)
+    websocket_api.async_register_command(hass, ws_author_releases_ignore)
     websocket_api.async_register_command(hass, ws_lookup_isbn)
     websocket_api.async_register_command(hass, ws_books_search_text)
     websocket_api.async_register_command(hass, ws_books_ai_series_lookup)

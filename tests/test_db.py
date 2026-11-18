@@ -426,3 +426,47 @@ def test_author_notifications_and_favorites(db: LibraryTrackerDatabase) -> None:
     # Different author or title should still be False
     assert db.has_author_notification(a2["id"], "New Release Title") is False
     assert db.has_author_notification(a1["id"], "Different Title") is False
+
+
+def test_get_author_release_recommendations_filters_library_matches(
+    db: LibraryTrackerDatabase,
+) -> None:
+    """A recorded recommendation that matches a book already in the library
+    is dropped from the list and deleted from the table as a side effect."""
+    db.add_book(isbn="111", title="Book 1", author_name="Author One", status="gelesen")
+    authors = db.get_authors()
+    a1 = authors[0]
+
+    # Recommendation A: book already in the library (same ISBN)
+    db.record_author_notification(a1["id"], "Book 1", "111")
+    # Recommendation B: genuinely new book
+    db.record_author_notification(a1["id"], "Book 2", "222")
+
+    recommendations = db.get_author_release_recommendations()
+    assert len(recommendations) == 1
+    assert recommendations[0]["title"] == "Book 2"
+    assert recommendations[0]["author_name"] == "Author One"
+
+    # The stale "Book 1" row was cleaned up, not just hidden
+    with db._get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) AS c FROM AuthorReleaseNotifications")
+        assert cursor.fetchone()["c"] == 1
+
+
+def test_set_author_release_notification_ignored(db: LibraryTrackerDatabase) -> None:
+    """Ignoring a recommendation removes it from the list permanently."""
+    db.add_book(isbn="111", title="Book 1", author_name="Author One", status="gelesen")
+    authors = db.get_authors()
+    a1 = authors[0]
+
+    db.record_author_notification(a1["id"], "Book 2", "222")
+    recommendations = db.get_author_release_recommendations()
+    assert len(recommendations) == 1
+    rec_id = recommendations[0]["id"]
+
+    assert db.set_author_release_notification_ignored(rec_id) is True
+    assert db.get_author_release_recommendations() == []
+
+    # Non-existent id returns False
+    assert db.set_author_release_notification_ignored(rec_id + 999) is False
